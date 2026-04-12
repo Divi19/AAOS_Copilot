@@ -70,6 +70,7 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       : state?.suspension_level === "high" ? 12
         : 6;
 
+  const isOffline = (state?.connectivity_mode ?? "cloud") !== "cloud";
   const mode = state?.vehicle_mode?.toLowerCase() ?? "normal";
   const isCampMode = state?.camp_mode || mode === "camp";
   const isDogMode = mode === "dog";
@@ -134,6 +135,18 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         .climateFlow { animation: climateFlow 2.5s ease-in-out infinite; }
       `}</style>
 
+      {/* HUD corner brackets */}
+      <line x1={8} y1={20} x2={8} y2={38} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={8} y1={20} x2={26} y2={20} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={212} y1={20} x2={212} y2={38} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={212} y1={20} x2={194} y2={20} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={8} y1={380} x2={8} y2={362} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={8} y1={380} x2={26} y2={380} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={212} y1={380} x2={212} y2={362} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={212} y1={380} x2={194} y2={380} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
+      <line x1={16} y1={80} x2={16} y2={320} stroke="#98cbff" strokeWidth="0.4" strokeDasharray="3 9" opacity="0.3" />
+      <line x1={204} y1={80} x2={204} y2={320} stroke="#98cbff" strokeWidth="0.4" strokeDasharray="3 9" opacity="0.3" />
+
       {/* Wheels */}
       <rect x={8 - suspensionGap} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
       <circle cx={23 - suspensionGap} cy={115} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
@@ -162,6 +175,8 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       {/* Car body */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" filter="url(#carShadow)" />
+      <path d="M 110 52 C 88 52, 61 61, 49 75 C 40 86, 38 100, 38 113 L 38 287 C 38 306, 40 320, 49 329 C 61 343, 88 350, 110 350 C 132 350, 159 343, 171 329 C 180 320, 182 306, 182 287 L 182 113 C 182 100, 180 86, 171 75 C 159 61, 132 52, 110 52 Z"
+        fill="none" stroke="#1e293b" strokeWidth="0.6" opacity="0.6" />
 
       {/* Hood / frunk */}
       {frunkOpen ? (
@@ -182,6 +197,7 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <ellipse cx={152} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
+      <line x1={76} y1={72} x2={144} y2={72} stroke="#98cbff" strokeWidth="0.4" opacity="0.2" />
 
       {/* Cabin */}
       <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
@@ -194,6 +210,8 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       {climateOn && climateOpacity > 0 && (
         <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill={climateColor} fillOpacity={climateOpacity} className="climateFlow" />
       )}
+
+      <line x1={75} y1={114} x2={149} y2={114} stroke="white" strokeWidth="0.5" opacity="0.08" />
 
       {/* Rear window */}
       <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
@@ -216,6 +234,7 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
+      <line x1={76} y1={330} x2={144} y2={330} stroke="#ef4444" strokeWidth="0.4" opacity="0.2" />
 
       {/* Frunk open glow */}
       {frunkOpen && (
@@ -246,6 +265,15 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
           <rect x={70} y={192} width={80} height={18} rx={4} fill="#0a1020" opacity="0.85" />
           <text x="110" y="205" textAnchor="middle" fill="#98cbff" fontSize="10" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">NORMAL</text>
         </>
+      )}
+
+      {/* Offline badge */}
+      {isOffline && (
+        <g>
+          <rect x={65} y={218} width={90} height={20} rx={4} fill="#1a0a00" opacity="0.95" />
+          <rect x={65} y={218} width={90} height={20} rx={4} fill="none" stroke="#f59e0b" strokeWidth="0.5" opacity="0.6" />
+          <text x="110" y="232" textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">OFFLINE</text>
+        </g>
       )}
     </svg>
   );
@@ -343,11 +371,15 @@ export default function Dashboard() {
 
       <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden", position: "relative" }}>
 
+        {/* Top accent line */}
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, transparent, #4edea3, transparent)", boxShadow: "0 0 10px #4edea3", zIndex: 50 }} />
+
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, position: "relative", zIndex: 40, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
+            <div style={{ width: "1px", height: "16px", background: "rgba(65,71,84,0.4)" }} />
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isCloud ? "#4edea3" : "#ffb4ab" }} />
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isCloud ? "#4edea3" : "#ffb4ab", boxShadow: isCloud ? "0 0 5px #4edea3" : "0 0 5px #ffb4ab" }} />
               <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", color: "#c1c6d7", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>
                 {isCloud ? "Cloud Connected" : "Offline — Edge Mode"}
               </span>
@@ -360,6 +392,7 @@ export default function Dashboard() {
               style={{ padding: "6px 14px", borderRadius: "4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(34,42,61,0.8)", border: "1px solid rgba(65,71,84,0.35)", color: "#dae2fd", cursor: "pointer", fontFamily: "Space Grotesk, system-ui", whiteSpace: "nowrap" }}
             >{tunnelLoading ? "..." : isCloud ? "Simulate Tunnel" : "Restore Cloud"}</button>
           </div>
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(to bottom, rgba(78,222,163,0.1), transparent)" }} />
         </header>
 
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -377,6 +410,16 @@ export default function Dashboard() {
           </aside>
 
           <section style={{ flex: 1, position: "relative", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+            {/* Grid dot background */}
+            <div style={{ position: "absolute", inset: 0, opacity: 0.08, pointerEvents: "none", backgroundImage: "radial-gradient(#98cbff 0.5px, transparent 0.5px)", backgroundSize: "40px 40px" }} />
+
+            {/* Canvas corner brackets */}
+            <div style={{ position: "absolute", top: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderTop: "2px solid rgba(152,203,255,0.3)", borderRadius: "4px 0 0 0" }} />
+            <div style={{ position: "absolute", top: "40px", right: "40px", width: "40px", height: "40px", borderRight: "2px solid rgba(152,203,255,0.3)", borderTop: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 4px 0 0" }} />
+            <div style={{ position: "absolute", bottom: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 0 4px" }} />
+            <div style={{ position: "absolute", bottom: "40px", right: "40px", width: "40px", height: "40px", borderRight: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 4px 0" }} />
+
             <CarVisualization state={vehicleState} />
 
             {/* Conversation panel */}
@@ -394,12 +437,21 @@ export default function Dashboard() {
                     <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
                   </div>
                 )}
+                {/* Tool chips */}
+                {lastTools.length > 0 && (
+                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", paddingLeft: "23px" }}>
+                    {lastTools.map((t, i) => (
+                      <span key={i} style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "3px", background: "rgba(152,203,255,0.08)", border: "1px solid rgba(152,203,255,0.18)", color: "#98cbff", fontFamily: "Space Grotesk, system-ui", fontWeight: 600 }}>{t.agent} → {t.tool}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Mic button */}
             <div style={{ position: "absolute", bottom: "40px", right: "40px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
               <div style={{ position: "relative" }}>
+                <div style={{ position: "absolute", inset: "-12px", borderRadius: "50%", background: listening ? "rgba(152,203,255,0.12)" : "transparent", filter: "blur(16px)", transition: "all 0.5s" }} />
                 {listening && (
                   <>
                     <div style={{ position: "absolute", inset: "-6px", borderRadius: "50%", border: "1.5px solid rgba(152,203,255,0.5)", animation: "ping 1.5s cubic-bezier(0,0,0.2,1) infinite" }} />
@@ -420,6 +472,9 @@ export default function Dashboard() {
             </div>
           </section>
         </div>
+
+        {/* Vignette overlay */}
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at center, transparent 0%, rgba(6,14,32,0.35) 100%)", zIndex: 10 }} />
 
         <style>{`
           @keyframes ping { 0%{transform:scale(1);opacity:0.8;} 80%,100%{transform:scale(1.5);opacity:0;} }
