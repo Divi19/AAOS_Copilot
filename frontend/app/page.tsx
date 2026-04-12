@@ -34,6 +34,61 @@ function getSuspColor(level: string | undefined): string {
   }
 }
 
+function CarVisualization({ state }: { state: VehicleState | null }) {
+  return (
+    <svg width="280" height="480" viewBox="0 0 220 400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#1a2744" />
+          <stop offset="100%" stopColor="#111c36" />
+        </linearGradient>
+      </defs>
+
+      {/* Wheels */}
+      <rect x={8} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
+      <circle cx={23} cy={115} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
+      <circle cx={23} cy={115} r={3.5} fill="#060e20" />
+
+      <rect x={182} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
+      <circle cx={197} cy={115} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
+      <circle cx={197} cy={115} r={3.5} fill="#060e20" />
+
+      <rect x={8} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
+      <circle cx={23} cy={285} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
+      <circle cx={23} cy={285} r={3.5} fill="#060e20" />
+
+      <rect x={182} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
+      <circle cx={197} cy={285} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
+      <circle cx={197} cy={285} r={3.5} fill="#060e20" />
+
+      {/* Car body */}
+      <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
+        fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" />
+
+      {/* Hood / frunk */}
+      <rect x={58} y={54} width={104} height={44} rx={8} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
+
+      {/* Headlights */}
+      <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" />
+      <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" />
+
+      {/* Cabin */}
+      <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
+      <rect x={72} y={155} width={76} height={48} rx={7} fill="#0b1326" stroke="#1e293b" strokeWidth="0.5" opacity="0.9" />
+
+      {/* Windshield */}
+      <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
+
+      {/* Rear window */}
+      <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
+
+      {/* Tail lights */}
+      <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" />
+      <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" />
+    </svg>
+  );
+}
+
 export default function Dashboard() {
   const [vehicleState, setVehicleState] = useState<VehicleState | null>(null);
   const [backendError, setBackendError] = useState(false);
@@ -123,7 +178,7 @@ export default function Dashboard() {
           </aside>
 
           <section style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)" }}>
-            <p style={{ color: "#8b90a0", fontFamily: "Space Grotesk, system-ui" }}>Car visualization coming soon</p>
+            <CarVisualization state={vehicleState} />
           </section>
         </div>
       </div>
