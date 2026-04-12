@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+google-genai
+google-adk[runners,sessions]==0.1.0
+vertexai
+deprecated
