@@ -49,6 +49,7 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       : state?.suspension_level === "high" ? 12
         : 6;
 
+  const frunkOpen = state?.frunk_open === true;
   const wheelColor = getSuspWheelColor(state?.suspension_level);
 
   return (
@@ -66,13 +67,26 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
           <stop offset="0%" stopColor="#ef4444" stopOpacity="0.6" />
           <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
         </radialGradient>
+        <radialGradient id="frunkGlowRad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#fbbf24" stopOpacity="0" />
+        </radialGradient>
         <filter id="lightGlow">
           <feGaussianBlur stdDeviation="2.5" result="blur" />
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
+        <filter id="softGlow">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
 
-      {/* Wheels — offset by suspensionGap */}
+      <style>{`
+        @keyframes frunkGlowAnim { 0%,100%{opacity:0.7} 50%{opacity:1} }
+        .frunkGlowAnim { animation: frunkGlowAnim 1.5s ease-in-out infinite; }
+      `}</style>
+
+      {/* Wheels */}
       <rect x={8 - suspensionGap} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
       <circle cx={23 - suspensionGap} cy={115} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
       <line x1={23 - suspensionGap} y1={104} x2={23 - suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
@@ -101,8 +115,19 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" />
 
-      {/* Hood */}
-      <rect x={58} y={54} width={104} height={44} rx={8} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
+      {/* Hood / frunk */}
+      {frunkOpen ? (
+        <>
+          <rect x={58} y={58} width={104} height={44} rx={8} fill="#003354" stroke="#98cbff" strokeWidth="1.2" className="frunkGlowAnim" />
+          <text x="110" y="84" textAnchor="middle" fill="#98cbff" fontSize="8" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">OPEN</text>
+        </>
+      ) : (
+        <>
+          <rect x={58} y={54} width={104} height={44} rx={8} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
+          <line x1={84} y1={58} x2={84} y2={94} stroke="#1e293b" strokeWidth="0.5" opacity="0.7" />
+          <line x1={136} y1={58} x2={136} y2={94} stroke="#1e293b" strokeWidth="0.5" opacity="0.7" />
+        </>
+      )}
 
       {/* Headlights */}
       <ellipse cx={68} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
@@ -125,6 +150,14 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
+
+      {/* Frunk open — amber glow on rear */}
+      {frunkOpen && (
+        <>
+          <ellipse cx={110} cy={348} rx={40} ry={10} fill="url(#frunkGlowRad)" />
+          <rect x={68} y={338} width={84} height={14} rx={4} fill="#fbbf24" fillOpacity="0.18" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.5" filter="url(#softGlow)" />
+        </>
+      )}
     </svg>
   );
 }
