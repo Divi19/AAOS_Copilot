@@ -50,7 +50,23 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         : 6;
 
   const frunkOpen = state?.frunk_open === true;
+  const isLocked = state?.is_locked === true;
+  const climateOn = state?.climate_on === true;
+  const climateTemp = state?.climate_temp ?? 22;
+  const mode = state?.vehicle_mode?.toLowerCase() ?? "normal";
+  const isCampMode = mode === "camp";
+  const isDogMode = mode === "dog";
+  const isNormalMode = mode === "normal";
   const wheelColor = getSuspWheelColor(state?.suspension_level);
+
+  const isHot = climateTemp > 23;
+  const climateColor = isHot ? "#fbbf24" : "#60a5fa";
+  const climateOpacity = climateOn
+    ? climateTemp < 18 ? 0.65
+      : climateTemp < 22 ? 0.55
+        : climateTemp < 26 ? 0.5
+          : 0.6
+    : 0;
 
   return (
     <svg width="280" height="480" viewBox="0 0 220 400" xmlns="http://www.w3.org/2000/svg" style={{ filter: "drop-shadow(0 0 32px rgba(152,203,255,0.15))" }}>
@@ -82,8 +98,16 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       </defs>
 
       <style>{`
+        @keyframes campPulse { 0%,100%{opacity:0.15} 50%{opacity:0.5} }
         @keyframes frunkGlowAnim { 0%,100%{opacity:0.7} 50%{opacity:1} }
+        @keyframes modePulse { 0%,100%{opacity:0.1} 50%{opacity:0.35} }
+        @keyframes lockPulse { 0%,100%{opacity:0.7} 50%{opacity:1} }
+        @keyframes climateFlow { 0%{opacity:0.85} 50%{opacity:1} 100%{opacity:0.85} }
+        .campPulse { animation: campPulse 2s ease-in-out infinite; }
         .frunkGlowAnim { animation: frunkGlowAnim 1.5s ease-in-out infinite; }
+        .modePulse { animation: modePulse 2.5s ease-in-out infinite; }
+        .lockPulse { animation: lockPulse 1.8s ease-in-out infinite; }
+        .climateFlow { animation: climateFlow 2.5s ease-in-out infinite; }
       `}</style>
 
       {/* Wheels */}
@@ -139,11 +163,34 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
       <rect x={72} y={155} width={76} height={48} rx={7} fill="#0b1326" stroke="#1e293b" strokeWidth="0.5" opacity="0.9" />
 
-      {/* Windshield */}
+      {/* Windshield base */}
       <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
+
+      {/* Climate tint overlay */}
+      {climateOn && climateOpacity > 0 && (
+        <path
+          d="M 62 140 L 158 140 L 152 110 L 68 110 Z"
+          fill={climateColor}
+          fillOpacity={climateOpacity}
+          className="climateFlow"
+        />
+      )}
 
       {/* Rear window */}
       <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
+
+      {/* Door seams */}
+      <line x1={32} y1={175} x2={32} y2={225} stroke="#2d3449" strokeWidth="0.8" />
+      <line x1={188} y1={175} x2={188} y2={225} stroke="#2d3449" strokeWidth="0.8" />
+      <line x1={37} y1={200} x2={183} y2={200} stroke="#1e293b" strokeWidth="0.6" />
+
+      {/* Lock highlights */}
+      {isLocked && (
+        <>
+          <rect x={31} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
+          <rect x={181} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
+        </>
+      )}
 
       {/* Tail lights */}
       <ellipse cx={68} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
@@ -151,11 +198,34 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
 
-      {/* Frunk open — amber glow on rear */}
+      {/* Frunk open glow */}
       {frunkOpen && (
         <>
           <ellipse cx={110} cy={348} rx={40} ry={10} fill="url(#frunkGlowRad)" />
           <rect x={68} y={338} width={84} height={14} rx={4} fill="#fbbf24" fillOpacity="0.18" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.5" filter="url(#softGlow)" />
+        </>
+      )}
+
+      {/* Mode badges */}
+      {isCampMode && (
+        <>
+          <circle cx={110} cy={200} r={95} fill="none" stroke="#4edea3" strokeWidth="0.6" opacity="0.3" className="campPulse" />
+          <circle cx={110} cy={200} r={82} fill="none" stroke="#4edea3" strokeWidth="0.3" opacity="0.15" className="campPulse" />
+          <rect x={70} y={192} width={80} height={18} rx={4} fill="#002113" opacity="0.95" />
+          <text x="110" y="205" textAnchor="middle" fill="#4edea3" fontSize="10" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">CAMP MODE</text>
+        </>
+      )}
+      {isDogMode && !isCampMode && (
+        <>
+          <circle cx={110} cy={200} r={90} fill="none" stroke="#fbbf24" strokeWidth="0.6" opacity="0.25" className="modePulse" />
+          <rect x={74} y={192} width={72} height={18} rx={4} fill="#1a1000" opacity="0.95" />
+          <text x="110" y="205" textAnchor="middle" fill="#fbbf24" fontSize="10" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">DOG MODE</text>
+        </>
+      )}
+      {isNormalMode && !isCampMode && !isDogMode && (
+        <>
+          <rect x={70} y={192} width={80} height={18} rx={4} fill="#0a1020" opacity="0.85" />
+          <text x="110" y="205" textAnchor="middle" fill="#98cbff" fontSize="10" fontWeight="bold" fontFamily="Space Grotesk, system-ui" letterSpacing="2">NORMAL</text>
         </>
       )}
     </svg>
@@ -216,6 +286,7 @@ export default function Dashboard() {
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 
       <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden" }}>
+
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
