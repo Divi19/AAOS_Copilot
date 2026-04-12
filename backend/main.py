@@ -160,12 +160,17 @@ async def execute_voice_command(voice: VoicePayload):
         tools_called = []
         agent_trace = []  # Detailed trace for the frontend panel
         
+        current_agent = "supervisor_agent"
         async for event in runner.run_async(
             user_id="demo_user",
             session_id=session.id,
             new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
         ):
-            agent_name = getattr(event, 'agent_name', 'unknown')
+            # Update the current agent if the event provides a name
+            if hasattr(event, 'agent_name') and event.agent_name and event.agent_name != 'unknown':
+                current_agent = event.agent_name
+
+            agent_name = current_agent
             
             # Track tool calls — handle multiple ADK event formats
             tool_name = None
