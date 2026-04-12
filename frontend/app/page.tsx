@@ -1,17 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getVehicleState, toggleConnectivity } from "../lib/api";
+import { useEffect, useRef, useState } from "react";
+import { getVehicleState, sendVoiceCommand, toggleConnectivity } from "../lib/api";
+
+interface SpeechRecognitionAPI extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionEventAPI) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+interface SpeechRecognitionEventAPI {
+  results: { 0: { 0: { transcript: string } } };
+}
+interface WindowWithSpeech extends Window {
+  SpeechRecognition?: new () => SpeechRecognitionAPI;
+  webkitSpeechRecognition?: new () => SpeechRecognitionAPI;
+}
 
 interface VehicleState {
   is_locked: boolean;
   climate_on: boolean;
   climate_temp: number;
   battery_level: number;
+  is_preconditioning: boolean;
   vehicle_mode: string;
   frunk_open: boolean;
+  trunk_open: boolean;
   suspension_level: string;
   connectivity_mode?: string;
+  camp_mode?: boolean;
 }
 
 function getModeColor(mode: string | undefined): string {
@@ -49,14 +70,14 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       : state?.suspension_level === "high" ? 12
         : 6;
 
+  const mode = state?.vehicle_mode?.toLowerCase() ?? "normal";
+  const isCampMode = state?.camp_mode || mode === "camp";
+  const isDogMode = mode === "dog";
+  const isNormalMode = mode === "normal";
   const frunkOpen = state?.frunk_open === true;
   const isLocked = state?.is_locked === true;
   const climateOn = state?.climate_on === true;
   const climateTemp = state?.climate_temp ?? 22;
-  const mode = state?.vehicle_mode?.toLowerCase() ?? "normal";
-  const isCampMode = mode === "camp";
-  const isDogMode = mode === "dog";
-  const isNormalMode = mode === "normal";
   const wheelColor = getSuspWheelColor(state?.suspension_level);
 
   const isHot = climateTemp > 23;
@@ -87,6 +108,9 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
           <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.5" />
           <stop offset="100%" stopColor="#fbbf24" stopOpacity="0" />
         </radialGradient>
+        <filter id="carShadow">
+          <feDropShadow dx="0" dy="4" stdDeviation="10" floodColor="#98cbff" floodOpacity="0.12" />
+        </filter>
         <filter id="lightGlow">
           <feGaussianBlur stdDeviation="2.5" result="blur" />
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
@@ -137,7 +161,7 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
 
       {/* Car body */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
-        fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" />
+        fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" filter="url(#carShadow)" />
 
       {/* Hood / frunk */}
       {frunkOpen ? (
@@ -166,14 +190,9 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       {/* Windshield base */}
       <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
-      {/* Climate tint overlay */}
+      {/* Climate tint */}
       {climateOn && climateOpacity > 0 && (
-        <path
-          d="M 62 140 L 158 140 L 152 110 L 68 110 Z"
-          fill={climateColor}
-          fillOpacity={climateOpacity}
-          className="climateFlow"
-        />
+        <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill={climateColor} fillOpacity={climateOpacity} className="climateFlow" />
       )}
 
       {/* Rear window */}
@@ -235,7 +254,12 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
 export default function Dashboard() {
   const [vehicleState, setVehicleState] = useState<VehicleState | null>(null);
   const [backendError, setBackendError] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [agentMessage, setAgentMessage] = useState("");
   const [tunnelLoading, setTunnelLoading] = useState(false);
+  const [lastTools, setLastTools] = useState<{ agent: string; tool: string }[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
 
   useEffect(() => {
     const poll = async () => {
@@ -252,6 +276,37 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
+  const toggleListening = () => {
+    if (typeof window === "undefined") return;
+    const w = window as WindowWithSpeech;
+    const SpeechRecognitionImpl = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SpeechRecognitionImpl) return;
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognitionImpl();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: SpeechRecognitionEventAPI) => {
+      const text = event.results[0][0].transcript;
+      setTranscript(text);
+      sendVoiceCommand(text)
+        .then((res) => {
+          if (res.tools_called) setLastTools(res.tools_called);
+          if (res.message) setAgentMessage(res.message);
+        })
+        .catch(() => { });
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  };
+
   const isCloud = (vehicleState?.connectivity_mode ?? "cloud") === "cloud";
   const lockColor = vehicleState?.is_locked ? "#fbbf24" : "#ffb4ab";
   const tempColor = (vehicleState?.climate_temp ?? 22) < 20 ? "#98cbff" : (vehicleState?.climate_temp ?? 22) <= 23 ? "#4edea3" : "#fbbf24";
@@ -259,6 +314,7 @@ export default function Dashboard() {
   const frunkColor = vehicleState?.frunk_open ? "#fbbf24" : "#8b90a0";
   const suspColor = getSuspColor(vehicleState?.suspension_level);
   const modeColor = getModeColor(vehicleState?.vehicle_mode);
+  const hasConversation = !!(transcript || agentMessage);
 
   const sideCard = (icon: string, label: string, value: string, subtext: string, color: string, isActive = false) => (
     <div style={{
@@ -285,9 +341,9 @@ export default function Dashboard() {
       <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 
-      <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden" }}>
+      <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden", position: "relative" }}>
 
-        <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
+        <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, position: "relative", zIndex: 40, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
@@ -301,13 +357,13 @@ export default function Dashboard() {
             {backendError && <span style={{ fontSize: "10px", color: "#6b7280" }}>Backend unreachable</span>}
             <button
               onClick={async () => { setTunnelLoading(true); await toggleConnectivity(); setTunnelLoading(false); }}
-              style={{ padding: "6px 14px", borderRadius: "4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(34,42,61,0.8)", border: "1px solid rgba(65,71,84,0.35)", color: "#dae2fd", cursor: "pointer", fontFamily: "Space Grotesk, system-ui" }}
+              style={{ padding: "6px 14px", borderRadius: "4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(34,42,61,0.8)", border: "1px solid rgba(65,71,84,0.35)", color: "#dae2fd", cursor: "pointer", fontFamily: "Space Grotesk, system-ui", whiteSpace: "nowrap" }}
             >{tunnelLoading ? "..." : isCloud ? "Simulate Tunnel" : "Restore Cloud"}</button>
           </div>
         </header>
 
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-          <aside style={{ width: "300px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderRight: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px", gap: "10px" }}>
+          <aside style={{ width: "300px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderRight: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px 20px", gap: "10px" }}>
             <div style={{ marginBottom: "4px", paddingLeft: "4px" }}>
               <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>VEHICLE</div>
               <div style={{ fontSize: "9px", letterSpacing: "0.1em", color: "#a0a8bc", textTransform: "uppercase", marginTop: "2px", fontFamily: "Space Grotesk, system-ui" }}>SYSTEMS NOMINAL</div>
@@ -320,10 +376,55 @@ export default function Dashboard() {
             {sideCard("speed", "Mode", vehicleState?.vehicle_mode ?? "—", `${(vehicleState?.vehicle_mode ?? "normal").toUpperCase()} MODE`, modeColor, vehicleState?.vehicle_mode === "camp" || vehicleState?.vehicle_mode === "dog")}
           </aside>
 
-          <section style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)" }}>
+          <section style={{ flex: 1, position: "relative", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <CarVisualization state={vehicleState} />
+
+            {/* Conversation panel */}
+            {hasConversation && (
+              <div style={{ position: "absolute", top: "56px", right: "56px", width: "280px", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
+                {transcript && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0 }}>record_voice_over</span>
+                    <span style={{ fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4 }}>&ldquo;{transcript}&rdquo;</span>
+                  </div>
+                )}
+                {agentMessage && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
+                    <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mic button */}
+            <div style={{ position: "absolute", bottom: "40px", right: "40px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+              <div style={{ position: "relative" }}>
+                {listening && (
+                  <>
+                    <div style={{ position: "absolute", inset: "-6px", borderRadius: "50%", border: "1.5px solid rgba(152,203,255,0.5)", animation: "ping 1.5s cubic-bezier(0,0,0.2,1) infinite" }} />
+                    <div style={{ position: "absolute", inset: "-18px", borderRadius: "50%", border: "1px solid rgba(152,203,255,0.2)", animation: "ping 1.5s cubic-bezier(0,0,0.2,1) infinite 0.3s" }} />
+                  </>
+                )}
+                <button
+                  onClick={toggleListening}
+                  aria-label="Toggle voice recognition"
+                  style={{ position: "relative", width: "96px", height: "96px", borderRadius: "50%", background: "rgba(45,52,73,0.95)", border: "2.5px solid rgba(255,255,255,0.88)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s", boxShadow: listening ? "0 0 0 2.5px rgba(255,255,255,0.88), 0 0 30px rgba(152,203,255,0.6), 0 0 60px rgba(152,203,255,0.2)" : "0 0 0 2.5px rgba(255,255,255,0.88), 0 0 20px rgba(152,203,255,0.25)" }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "44px", color: listening ? "#98cbff" : "white", fontVariationSettings: "'FILL' 1", transition: "color 0.2s" }}>mic</span>
+                </button>
+              </div>
+              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", color: listening ? "#98cbff" : "#a0a8bc", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui", transition: "color 0.3s" }}>
+                {listening ? "Listening..." : "Assistant Ready"}
+              </span>
+            </div>
           </section>
         </div>
+
+        <style>{`
+          @keyframes ping { 0%{transform:scale(1);opacity:0.8;} 80%,100%{transform:scale(1.5);opacity:0;} }
+          .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+        `}</style>
       </div>
     </>
   );
