@@ -371,14 +371,16 @@ export default function Dashboard() {
 
       <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden", position: "relative" }}>
 
-        {/* Top accent line */}
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, transparent, #4edea3, transparent)", boxShadow: "0 0 10px #4edea3", zIndex: 50 }} />
 
+        {/* Header — now with vertical divider + glowing status dot */}
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, position: "relative", zIndex: 40, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
+            {/* Vertical divider */}
             <div style={{ width: "1px", height: "16px", background: "rgba(65,71,84,0.4)" }} />
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
+              {/* Glowing status dot */}
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isCloud ? "#4edea3" : "#ffb4ab", boxShadow: isCloud ? "0 0 5px #4edea3" : "0 0 5px #ffb4ab" }} />
               <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", color: "#c1c6d7", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>
                 {isCloud ? "Cloud Connected" : "Offline — Edge Mode"}
@@ -387,6 +389,7 @@ export default function Dashboard() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {backendError && <span style={{ fontSize: "10px", color: "#6b7280" }}>Backend unreachable</span>}
+            {/* whiteSpace: nowrap prevents button text wrapping on narrow viewports */}
             <button
               onClick={async () => { setTunnelLoading(true); await toggleConnectivity(); setTunnelLoading(false); }}
               style={{ padding: "6px 14px", borderRadius: "4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(34,42,61,0.8)", border: "1px solid rgba(65,71,84,0.35)", color: "#dae2fd", cursor: "pointer", fontFamily: "Space Grotesk, system-ui", whiteSpace: "nowrap" }}
@@ -410,11 +413,7 @@ export default function Dashboard() {
           </aside>
 
           <section style={{ flex: 1, position: "relative", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-
-            {/* Grid dot background */}
             <div style={{ position: "absolute", inset: 0, opacity: 0.08, pointerEvents: "none", backgroundImage: "radial-gradient(#98cbff 0.5px, transparent 0.5px)", backgroundSize: "40px 40px" }} />
-
-            {/* Canvas corner brackets */}
             <div style={{ position: "absolute", top: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderTop: "2px solid rgba(152,203,255,0.3)", borderRadius: "4px 0 0 0" }} />
             <div style={{ position: "absolute", top: "40px", right: "40px", width: "40px", height: "40px", borderRight: "2px solid rgba(152,203,255,0.3)", borderTop: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 4px 0 0" }} />
             <div style={{ position: "absolute", bottom: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 0 4px" }} />
@@ -422,7 +421,6 @@ export default function Dashboard() {
 
             <CarVisualization state={vehicleState} />
 
-            {/* Conversation panel */}
             {hasConversation && (
               <div style={{ position: "absolute", top: "56px", right: "56px", width: "280px", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
                 {transcript && (
@@ -437,7 +435,6 @@ export default function Dashboard() {
                     <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
                   </div>
                 )}
-                {/* Tool chips */}
                 {lastTools.length > 0 && (
                   <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", paddingLeft: "23px" }}>
                     {lastTools.map((t, i) => (
@@ -448,7 +445,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Mic button */}
             <div style={{ position: "absolute", bottom: "40px", right: "40px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", inset: "-12px", borderRadius: "50%", background: listening ? "rgba(152,203,255,0.12)" : "transparent", filter: "blur(16px)", transition: "all 0.5s" }} />
@@ -473,7 +469,6 @@ export default function Dashboard() {
           </section>
         </div>
 
-        {/* Vignette overlay */}
         <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at center, transparent 0%, rgba(6,14,32,0.35) 100%)", zIndex: 10 }} />
 
         <style>{`
