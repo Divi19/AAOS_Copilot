@@ -172,9 +172,10 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <line x1={186 + suspensionGap} y1={285} x2={208 + suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
       <circle cx={197 + suspensionGap} cy={285} r={3.5} fill="#060e20" />
 
-      {/* Car body */}
+      {/* Car body — outer fill */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" filter="url(#carShadow)" />
+      {/* Inner body stroke — adds depth to the silhouette */}
       <path d="M 110 52 C 88 52, 61 61, 49 75 C 40 86, 38 100, 38 113 L 38 287 C 38 306, 40 320, 49 329 C 61 343, 88 350, 110 350 C 132 350, 159 343, 171 329 C 180 320, 182 306, 182 287 L 182 113 C 182 100, 180 86, 171 75 C 159 61, 132 52, 110 52 Z"
         fill="none" stroke="#1e293b" strokeWidth="0.6" opacity="0.6" />
 
@@ -192,11 +193,12 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Headlights */}
+      {/* Headlights + connector line */}
       <ellipse cx={68} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <ellipse cx={152} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
+      {/* Connector line between headlights */}
       <line x1={76} y1={72} x2={144} y2={72} stroke="#98cbff" strokeWidth="0.4" opacity="0.2" />
 
       {/* Cabin */}
@@ -229,11 +231,12 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Tail lights */}
+      {/* Tail lights + connector line */}
       <ellipse cx={68} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
+      {/* Connector line between tail lights */}
       <line x1={76} y1={330} x2={144} y2={330} stroke="#ef4444" strokeWidth="0.4" opacity="0.2" />
 
       {/* Frunk open glow */}
@@ -373,14 +376,11 @@ export default function Dashboard() {
 
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, transparent, #4edea3, transparent)", boxShadow: "0 0 10px #4edea3", zIndex: 50 }} />
 
-        {/* Header — now with vertical divider + glowing status dot */}
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, position: "relative", zIndex: 40, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
-            {/* Vertical divider */}
             <div style={{ width: "1px", height: "16px", background: "rgba(65,71,84,0.4)" }} />
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
-              {/* Glowing status dot */}
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isCloud ? "#4edea3" : "#ffb4ab", boxShadow: isCloud ? "0 0 5px #4edea3" : "0 0 5px #ffb4ab" }} />
               <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", color: "#c1c6d7", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>
                 {isCloud ? "Cloud Connected" : "Offline — Edge Mode"}
@@ -389,7 +389,6 @@ export default function Dashboard() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {backendError && <span style={{ fontSize: "10px", color: "#6b7280" }}>Backend unreachable</span>}
-            {/* whiteSpace: nowrap prevents button text wrapping on narrow viewports */}
             <button
               onClick={async () => { setTunnelLoading(true); await toggleConnectivity(); setTunnelLoading(false); }}
               style={{ padding: "6px 14px", borderRadius: "4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(34,42,61,0.8)", border: "1px solid rgba(65,71,84,0.35)", color: "#dae2fd", cursor: "pointer", fontFamily: "Space Grotesk, system-ui", whiteSpace: "nowrap" }}
