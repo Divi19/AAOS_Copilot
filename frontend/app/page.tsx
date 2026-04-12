@@ -34,43 +34,81 @@ function getSuspColor(level: string | undefined): string {
   }
 }
 
+function getSuspWheelColor(level: string | undefined): string {
+  switch (level?.toLowerCase()) {
+    case "low": return "#8b90a0";
+    case "high": return "#4edea3";
+    case "standard": return "#8b90a0";
+    default: return "#8b90a0";
+  }
+}
+
 function CarVisualization({ state }: { state: VehicleState | null }) {
+  const suspensionGap =
+    state?.suspension_level === "low" ? 2
+      : state?.suspension_level === "high" ? 12
+        : 6;
+
+  const wheelColor = getSuspWheelColor(state?.suspension_level);
+
   return (
-    <svg width="280" height="480" viewBox="0 0 220 400" xmlns="http://www.w3.org/2000/svg">
+    <svg width="280" height="480" viewBox="0 0 220 400" xmlns="http://www.w3.org/2000/svg" style={{ filter: "drop-shadow(0 0 32px rgba(152,203,255,0.15))" }}>
       <defs>
         <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#1a2744" />
           <stop offset="100%" stopColor="#111c36" />
         </linearGradient>
+        <radialGradient id="hlGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#98cbff" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#98cbff" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="tlGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#ef4444" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
+        </radialGradient>
+        <filter id="lightGlow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
 
-      {/* Wheels */}
-      <rect x={8} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
-      <circle cx={23} cy={115} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
-      <circle cx={23} cy={115} r={3.5} fill="#060e20" />
+      {/* Wheels — offset by suspensionGap */}
+      <rect x={8 - suspensionGap} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
+      <circle cx={23 - suspensionGap} cy={115} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
+      <line x1={23 - suspensionGap} y1={104} x2={23 - suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <line x1={12 - suspensionGap} y1={115} x2={34 - suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <circle cx={23 - suspensionGap} cy={115} r={3.5} fill="#060e20" />
 
-      <rect x={182} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
-      <circle cx={197} cy={115} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
-      <circle cx={197} cy={115} r={3.5} fill="#060e20" />
+      <rect x={182 + suspensionGap} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
+      <circle cx={197 + suspensionGap} cy={115} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
+      <line x1={197 + suspensionGap} y1={104} x2={197 + suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <line x1={186 + suspensionGap} y1={115} x2={208 + suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <circle cx={197 + suspensionGap} cy={115} r={3.5} fill="#060e20" />
 
-      <rect x={8} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
-      <circle cx={23} cy={285} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
-      <circle cx={23} cy={285} r={3.5} fill="#060e20" />
+      <rect x={8 - suspensionGap} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
+      <circle cx={23 - suspensionGap} cy={285} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
+      <line x1={23 - suspensionGap} y1={274} x2={23 - suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <line x1={12 - suspensionGap} y1={285} x2={34 - suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <circle cx={23 - suspensionGap} cy={285} r={3.5} fill="#060e20" />
 
-      <rect x={182} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke="#98cbff" strokeWidth="1.5" />
-      <circle cx={197} cy={285} r={11} fill="#1a2744" stroke="#98cbff" strokeWidth="0.8" />
-      <circle cx={197} cy={285} r={3.5} fill="#060e20" />
+      <rect x={182 + suspensionGap} y={250} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
+      <circle cx={197 + suspensionGap} cy={285} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
+      <line x1={197 + suspensionGap} y1={274} x2={197 + suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <line x1={186 + suspensionGap} y1={285} x2={208 + suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
+      <circle cx={197 + suspensionGap} cy={285} r={3.5} fill="#060e20" />
 
       {/* Car body */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" />
 
-      {/* Hood / frunk */}
+      {/* Hood */}
       <rect x={58} y={54} width={104} height={44} rx={8} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
 
       {/* Headlights */}
-      <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" />
-      <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" />
+      <ellipse cx={68} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
+      <ellipse cx={152} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
+      <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
+      <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
 
       {/* Cabin */}
       <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
@@ -83,8 +121,10 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
       {/* Tail lights */}
-      <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" />
-      <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" />
+      <ellipse cx={68} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
+      <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
+      <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
+      <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
     </svg>
   );
 }
@@ -143,7 +183,6 @@ export default function Dashboard() {
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 
       <div style={{ background: "#0b1326", minHeight: "100vh", height: "100vh", display: "flex", flexDirection: "column", color: "#dae2fd", fontFamily: "Inter, system-ui", overflow: "hidden" }}>
-
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
