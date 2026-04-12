@@ -57,12 +57,14 @@ function getSuspColor(level: string | undefined): string {
 
 function getSuspWheelColor(level: string | undefined): string {
   switch (level?.toLowerCase()) {
-    case "low": return "#8b90a0";
-    case "high": return "#4edea3";
+    case "low": return "#8b90a0";   // default — no special color
+    case "high": return "#4edea3";  // teal for raised
     case "standard": return "#8b90a0";
     default: return "#8b90a0";
   }
 }
+
+// ─── Car SVG ─────────────────────────────────────────────────────────────────
 
 function CarVisualization({ state }: { state: VehicleState | null }) {
   const suspensionGap =
@@ -81,13 +83,15 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
   const climateTemp = state?.climate_temp ?? 22;
   const wheelColor = getSuspWheelColor(state?.suspension_level);
 
+  // Climate: cold = blue tint on windshield, hot = yellow/amber tint
+  // Both should be clearly visible
   const isHot = climateTemp > 23;
   const climateColor = isHot ? "#fbbf24" : "#60a5fa";
   const climateOpacity = climateOn
     ? climateTemp < 18 ? 0.65
       : climateTemp < 22 ? 0.55
         : climateTemp < 26 ? 0.5
-          : 0.6
+          : 0.6   // hot is also clearly visible
     : 0;
 
   return (
@@ -172,10 +176,9 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <line x1={186 + suspensionGap} y1={285} x2={208 + suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
       <circle cx={197 + suspensionGap} cy={285} r={3.5} fill="#060e20" />
 
-      {/* Car body — outer fill */}
+      {/* Car body */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" filter="url(#carShadow)" />
-      {/* Inner body stroke — adds depth to the silhouette */}
       <path d="M 110 52 C 88 52, 61 61, 49 75 C 40 86, 38 100, 38 113 L 38 287 C 38 306, 40 320, 49 329 C 61 343, 88 350, 110 350 C 132 350, 159 343, 171 329 C 180 320, 182 306, 182 287 L 182 113 C 182 100, 180 86, 171 75 C 159 61, 132 52, 110 52 Z"
         fill="none" stroke="#1e293b" strokeWidth="0.6" opacity="0.6" />
 
@@ -193,24 +196,28 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Headlights + connector line */}
+      {/* Headlights */}
       <ellipse cx={68} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <ellipse cx={152} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
-      {/* Connector line between headlights */}
       <line x1={76} y1={72} x2={144} y2={72} stroke="#98cbff" strokeWidth="0.4" opacity="0.2" />
 
-      {/* Cabin */}
+      {/* Roof / cabin */}
       <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
       <rect x={72} y={155} width={76} height={48} rx={7} fill="#0b1326" stroke="#1e293b" strokeWidth="0.5" opacity="0.9" />
 
       {/* Windshield base */}
       <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
-      {/* Climate tint */}
+      {/* ── Climate: clearly visible tint over windshield ── */}
       {climateOn && climateOpacity > 0 && (
-        <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill={climateColor} fillOpacity={climateOpacity} className="climateFlow" />
+        <path
+          d="M 62 140 L 158 140 L 152 110 L 68 110 Z"
+          fill={climateColor}
+          fillOpacity={climateOpacity}
+          className="climateFlow"
+        />
       )}
 
       <line x1={75} y1={114} x2={149} y2={114} stroke="white" strokeWidth="0.5" opacity="0.08" />
@@ -218,28 +225,29 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       {/* Rear window */}
       <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
-      {/* Door seams */}
+      {/* Door seams base */}
       <line x1={32} y1={175} x2={32} y2={225} stroke="#2d3449" strokeWidth="0.8" />
       <line x1={188} y1={175} x2={188} y2={225} stroke="#2d3449" strokeWidth="0.8" />
       <line x1={37} y1={200} x2={183} y2={200} stroke="#1e293b" strokeWidth="0.6" />
 
-      {/* Lock highlights */}
+      {/* ── Lock: yellow highlight on both door panels ── */}
       {isLocked && (
         <>
+          {/* Left door highlight */}
           <rect x={31} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
+          {/* Right door highlight */}
           <rect x={181} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
         </>
       )}
 
-      {/* Tail lights + connector line */}
+      {/* Tail lights */}
       <ellipse cx={68} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
-      {/* Connector line between tail lights */}
       <line x1={76} y1={330} x2={144} y2={330} stroke="#ef4444" strokeWidth="0.4" opacity="0.2" />
 
-      {/* Frunk open glow */}
+      {/* Trunk glow when frunk open */}
       {frunkOpen && (
         <>
           <ellipse cx={110} cy={348} rx={40} ry={10} fill="url(#frunkGlowRad)" />
@@ -270,7 +278,6 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Offline badge */}
       {isOffline && (
         <g>
           <rect x={65} y={218} width={90} height={20} rx={4} fill="#1a0a00" opacity="0.95" />
@@ -281,6 +288,8 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
     </svg>
   );
 }
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const [vehicleState, setVehicleState] = useState<VehicleState | null>(null);
@@ -376,6 +385,7 @@ export default function Dashboard() {
 
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, transparent, #4edea3, transparent)", boxShadow: "0 0 10px #4edea3", zIndex: 50 }} />
 
+        {/* Top Bar */}
         <header style={{ background: "#0b1326", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: "64px", flexShrink: 0, position: "relative", zIndex: 40, borderBottom: "1px solid rgba(65,71,84,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", fontFamily: "Space Grotesk, system-ui" }}>KINETIC OBSERVATORY</span>
@@ -397,7 +407,10 @@ export default function Dashboard() {
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(to bottom, rgba(78,222,163,0.1), transparent)" }} />
         </header>
 
+        {/* Main Content */}
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+
+          {/* Left Sidebar */}
           <aside style={{ width: "300px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderRight: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px 20px", gap: "10px" }}>
             <div style={{ marginBottom: "4px", paddingLeft: "4px" }}>
               <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>VEHICLE</div>
@@ -411,6 +424,7 @@ export default function Dashboard() {
             {sideCard("speed", "Mode", vehicleState?.vehicle_mode ?? "—", `${(vehicleState?.vehicle_mode ?? "normal").toUpperCase()} MODE`, modeColor, vehicleState?.vehicle_mode === "camp" || vehicleState?.vehicle_mode === "dog")}
           </aside>
 
+          {/* Center Canvas */}
           <section style={{ flex: 1, position: "relative", background: "radial-gradient(circle at center, #131b2e 0%, #0b1326 100%)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ position: "absolute", inset: 0, opacity: 0.08, pointerEvents: "none", backgroundImage: "radial-gradient(#98cbff 0.5px, transparent 0.5px)", backgroundSize: "40px 40px" }} />
             <div style={{ position: "absolute", top: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderTop: "2px solid rgba(152,203,255,0.3)", borderRadius: "4px 0 0 0" }} />
@@ -420,6 +434,7 @@ export default function Dashboard() {
 
             <CarVisualization state={vehicleState} />
 
+            {/* Conversation panel */}
             {hasConversation && (
               <div style={{ position: "absolute", top: "56px", right: "56px", width: "280px", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
                 {transcript && (
@@ -444,6 +459,7 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Mic button */}
             <div style={{ position: "absolute", bottom: "40px", right: "40px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", inset: "-12px", borderRadius: "50%", background: listening ? "rgba(152,203,255,0.12)" : "transparent", filter: "blur(16px)", transition: "all 0.5s" }} />
