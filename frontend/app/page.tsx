@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getVehicleState, sendVoiceCommand, toggleConnectivity } from "../lib/api";
+import SpotifyPlayer from "../components/SpotifyPlayer";
 
 interface SpeechRecognitionAPI extends EventTarget {
   continuous: boolean;
@@ -485,6 +486,8 @@ export default function Dashboard() {
         </div>
 
         <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at center, transparent 0%, rgba(6,14,32,0.35) 100%)", zIndex: 10 }} />
+
+        <SpotifyPlayer />
 
         <style>{`
           @keyframes ping { 0%{transform:scale(1);opacity:0.8;} 80%,100%{transform:scale(1.5);opacity:0;} }
