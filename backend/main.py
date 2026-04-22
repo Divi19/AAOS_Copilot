@@ -5,7 +5,6 @@ from state import get_state, reset_state
 import json
 import os
 import time
-import base64
 import requests as http_requests
 from typing import Optional, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
@@ -259,43 +258,15 @@ class DevicePayload(BaseModel):
     device_id: str
 
 
-# Simple in-memory token cache — avoids hammering Spotify's token endpoint on every poll
-_spotify_token_cache: dict = {"token": None, "expires_at": 0.0}
-
-
 def _get_spotify_access_token() -> str:
-    """Returns a valid Spotify access token, refreshing via the refresh token flow if needed."""
-    if _spotify_token_cache["token"] and time.time() < _spotify_token_cache["expires_at"] - 60:
-        return _spotify_token_cache["token"]  # type: ignore[return-value]
-
-    client_id = os.getenv("SPOTIFY_CLIENT_ID")
-    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
-    refresh_token = os.getenv("SPOTIFY_REFRESH_TOKEN")
-
-    if not all([client_id, client_secret, refresh_token]):
+    """Returns a valid Spotify access token (raises HTTPException on failure)."""
+    token = spotify_state.get_access_token()
+    if not token:
         raise HTTPException(
             status_code=500,
             detail="Spotify credentials not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, and SPOTIFY_REFRESH_TOKEN.",
         )
-
-    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    response = http_requests.post(
-        "https://accounts.spotify.com/api/token",
-        headers={
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
-        timeout=10,
-    )
-
-    if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Spotify token refresh failed: {response.text}")
-
-    data = response.json()
-    _spotify_token_cache["token"] = data["access_token"]
-    _spotify_token_cache["expires_at"] = time.time() + data.get("expires_in", 3600)
-    return data["access_token"]
+    return token
 
 
 @app.get("/spotify/token")
@@ -314,7 +285,7 @@ def register_spotify_device(payload: DevicePayload):
 
 @app.get("/spotify/now-playing")
 def get_now_playing():
-    """Returns the currently playing Spotify track, or {is_playing: false} if nothing is playing."""
+    """Returns the current Spotify track (playing or paused), or {is_playing: false} if nothing is loaded."""
     try:
         token = _get_spotify_access_token()
     except HTTPException:
@@ -326,7 +297,7 @@ def get_now_playing():
         timeout=5,
     )
 
-    # 204 = player is inactive / nothing queued
+    # 204 = player is inactive / nothing loaded
     if response.status_code == 204 or not response.content:
         return {"is_playing": False}
 
@@ -335,7 +306,8 @@ def get_now_playing():
 
     data = response.json()
 
-    if not data.get("is_playing") or not data.get("item"):
+    # No item means nothing is loaded at all — hide the widget
+    if not data.get("item"):
         return {"is_playing": False}
 
     item = data["item"]
@@ -345,11 +317,94 @@ def get_now_playing():
     album_art_url = images[1]["url"] if len(images) > 1 else (images[0]["url"] if images else None)
 
     return {
-        "is_playing": True,
+        "is_playing": data.get("is_playing", False),
         "track_name": item.get("name"),
         "artist_name": artists,
         "album_art_url": album_art_url,
+        "progress_ms": data.get("progress_ms", 0),
+        "duration_ms": item.get("duration_ms", 0),
     }
+
+
+class SeekPayload(BaseModel):
+    position_ms: int
+
+
+@app.post("/spotify/previous")
+def spotify_previous():
+    """Skip to the previous track on the stored device."""
+    token = _get_spotify_access_token()
+    device_id = spotify_state._spotify_device_id
+    params = {"device_id": device_id} if device_id else {}
+    http_requests.post(
+        "https://api.spotify.com/v1/me/player/previous",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        timeout=5,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/spotify/next")
+def spotify_next():
+    """Skip to the next track on the stored device."""
+    token = _get_spotify_access_token()
+    device_id = spotify_state._spotify_device_id
+    params = {"device_id": device_id} if device_id else {}
+    http_requests.post(
+        "https://api.spotify.com/v1/me/player/next",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        timeout=5,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/spotify/seek")
+def spotify_seek(payload: SeekPayload):
+    """Seek to a position (ms) on the stored device."""
+    token = _get_spotify_access_token()
+    device_id = spotify_state._spotify_device_id
+    params: dict = {"position_ms": payload.position_ms}
+    if device_id:
+        params["device_id"] = device_id
+    http_requests.put(
+        "https://api.spotify.com/v1/me/player/seek",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        timeout=5,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/spotify/pause")
+def spotify_pause():
+    """Pause playback on the stored device."""
+    token = _get_spotify_access_token()
+    device_id = spotify_state._spotify_device_id
+    params = {"device_id": device_id} if device_id else {}
+    http_requests.put(
+        "https://api.spotify.com/v1/me/player/pause",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        timeout=5,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/spotify/resume")
+def spotify_resume():
+    """Resume playback on the stored device."""
+    token = _get_spotify_access_token()
+    device_id = spotify_state._spotify_device_id
+    params = {"device_id": device_id} if device_id else {}
+    http_requests.put(
+        "https://api.spotify.com/v1/me/player/play",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        timeout=5,
+    )
+    return {"status": "ok"}
 
 # Serve the Next.js static frontend (when deployed as unified container)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
