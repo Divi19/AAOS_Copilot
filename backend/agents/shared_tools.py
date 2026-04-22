@@ -4,7 +4,7 @@ from state import get_state
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
-import spotify_state
+import spotify_state  # shared device ID + access token cache
 
 def set_vehicle_mode(mode: str) -> str:
     """Sets the vehicle hardware mode (e.g. camp, dog, normal)."""
@@ -72,6 +72,43 @@ def play_music_for_mood(mood: str) -> str:
 
         sp.start_playback(device_id=device_id, context_uri=playlist_uri)
         return f"Playing {mood} playlist on Spotify."
+
+    except Exception as e:
+        return f"Spotify error: {str(e)}"
+
+
+def play_specific_track(track_name: str, artist: str) -> str:
+    """Plays a specific song on Spotify by searching for it by name and artist.
+    Use this when the user requests a particular song or artist, not a mood."""
+    try:
+        device_id = spotify_state._spotify_device_id
+        if not device_id:
+            return "No browser player connected yet. Open the app in a browser first so the audio player can initialize."
+
+        token = spotify_state.get_access_token()
+        if not token:
+            return "Spotify is not configured. Cannot play specific tracks."
+
+        print(f"🎵 [SPOTIFY] Searching for track: '{track_name}' by '{artist}'")
+
+        # Use spotipy with the pre-obtained access token (no OAuth redirect flow needed)
+        sp = spotipy.Spotify(auth=token)
+        results = sp.search(q=f"track:{track_name} artist:{artist}", type="track", limit=1)
+        tracks = results.get("tracks", {}).get("items", [])
+
+        if not tracks:
+            print(f"🎵 [SPOTIFY] No results found for '{track_name}' by '{artist}'")
+            return "Could not find that track on Spotify"
+
+        found = tracks[0]
+        track_uri = found["uri"]
+        found_name = found.get("name", track_name)
+        found_artist = found["artists"][0]["name"] if found.get("artists") else artist
+
+        print(f"🎵 [SPOTIFY] Found: '{found_name}' by '{found_artist}' — URI: {track_uri}, device: {device_id}")
+
+        sp.start_playback(device_id=device_id, uris=[track_uri])
+        return f"Playing {found_name} by {found_artist}"
 
     except Exception as e:
         return f"Spotify error: {str(e)}"
