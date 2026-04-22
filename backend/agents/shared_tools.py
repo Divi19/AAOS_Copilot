@@ -2,8 +2,6 @@ from models import Action
 from executor import execute_action
 from state import get_state
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
-import os
 import spotify_state  # shared device ID + access token cache
 
 def set_vehicle_mode(mode: str) -> str:
@@ -59,15 +57,17 @@ def play_music_for_mood(mood: str) -> str:
         if not device_id:
             return "No browser player connected yet. Open the app in a browser first so the audio player can initialize."
 
+        # Use the pre-obtained access token from the shared cache.
+        # SpotifyOAuth must NOT be used here — on Cloud Run (no cached token file,
+        # no stdin) it blocks forever on input(), consuming a thread pool thread
+        # permanently and causing every endpoint to 504 after the pool is exhausted.
+        token = spotify_state.get_access_token()
+        if not token:
+            return "Spotify is not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, and SPOTIFY_REFRESH_TOKEN."
+
         print(f"🎵 [SPOTIFY] Using device_id: {device_id}")
 
-        sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-            client_id=os.getenv("SPOTIFY_CLIENT_ID"),
-            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
-            scope="user-modify-playback-state user-read-playback-state",
-        ))
-
+        sp = spotipy.Spotify(auth=token)
         playlist_uri = MOOD_TO_PLAYLIST.get(mood.lower(), MOOD_TO_PLAYLIST["neutral"])
 
         sp.start_playback(device_id=device_id, context_uri=playlist_uri)
