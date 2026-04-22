@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 # CRITICAL: Load .env BEFORE importing ADK agents — they read env vars at import time
 load_dotenv()
-os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "smartvehicle-agent")
+os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "aaos-vehicle-system")
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
 
@@ -34,7 +34,7 @@ app.add_middleware(
 )
 
 # === ENTERPRISE PIPELINE: Vertex AI ===
-GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "smartvehicle-agent")
+GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "aaos-vehicle-system")
 GCP_REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
 
 print("Initializing Vertex AI Enterprise Infrastructure...")
@@ -253,3 +253,4 @@ def reset_vehicle_state():
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(STATIC_DIR):
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+    
