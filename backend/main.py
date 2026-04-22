@@ -5,7 +5,8 @@ from state import get_state, reset_state
 import json
 import os
 import time
-import requests as http_requests
+import asyncio
+import httpx
 from typing import Optional, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -258,9 +259,14 @@ class DevicePayload(BaseModel):
     device_id: str
 
 
-def _get_spotify_access_token() -> str:
-    """Returns a valid Spotify access token (raises HTTPException on failure)."""
-    token = spotify_state.get_access_token()
+async def _get_spotify_access_token() -> str:
+    """Returns a valid Spotify access token (raises HTTPException on failure).
+
+    Delegates to spotify_state.get_access_token() via asyncio.to_thread so that
+    both the fast cache-hit path (dict lookup) and the rare cache-miss path
+    (sync requests call) run off the event loop.
+    """
+    token = await asyncio.to_thread(spotify_state.get_access_token)
     if not token:
         raise HTTPException(
             status_code=500,
@@ -270,9 +276,9 @@ def _get_spotify_access_token() -> str:
 
 
 @app.get("/spotify/token")
-def get_spotify_token():
+async def get_spotify_token():
     """Returns a fresh Spotify access token using the stored refresh token."""
-    return {"access_token": _get_spotify_access_token()}
+    return {"access_token": await _get_spotify_access_token()}
 
 
 @app.post("/spotify/device")
@@ -284,18 +290,18 @@ def register_spotify_device(payload: DevicePayload):
 
 
 @app.get("/spotify/now-playing")
-def get_now_playing():
+async def get_now_playing():
     """Returns the current Spotify track (playing or paused), or {is_playing: false} if nothing is loaded."""
     try:
-        token = _get_spotify_access_token()
+        token = await _get_spotify_access_token()
     except HTTPException:
         return {"is_playing": False}
 
-    response = http_requests.get(
-        "https://api.spotify.com/v1/me/player/currently-playing",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.get(
+            "https://api.spotify.com/v1/me/player/currently-playing",
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
     # 204 = player is inactive / nothing loaded
     if response.status_code == 204 or not response.content:
@@ -331,79 +337,79 @@ class SeekPayload(BaseModel):
 
 
 @app.post("/spotify/previous")
-def spotify_previous():
+async def spotify_previous():
     """Skip to the previous track on the stored device."""
-    token = _get_spotify_access_token()
+    token = await _get_spotify_access_token()
     device_id = spotify_state._spotify_device_id
     params = {"device_id": device_id} if device_id else {}
-    http_requests.post(
-        "https://api.spotify.com/v1/me/player/previous",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.post(
+            "https://api.spotify.com/v1/me/player/previous",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
     return {"status": "ok"}
 
 
 @app.post("/spotify/next")
-def spotify_next():
+async def spotify_next():
     """Skip to the next track on the stored device."""
-    token = _get_spotify_access_token()
+    token = await _get_spotify_access_token()
     device_id = spotify_state._spotify_device_id
     params = {"device_id": device_id} if device_id else {}
-    http_requests.post(
-        "https://api.spotify.com/v1/me/player/next",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.post(
+            "https://api.spotify.com/v1/me/player/next",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
     return {"status": "ok"}
 
 
 @app.post("/spotify/seek")
-def spotify_seek(payload: SeekPayload):
+async def spotify_seek(payload: SeekPayload):
     """Seek to a position (ms) on the stored device."""
-    token = _get_spotify_access_token()
+    token = await _get_spotify_access_token()
     device_id = spotify_state._spotify_device_id
     params: dict = {"position_ms": payload.position_ms}
     if device_id:
         params["device_id"] = device_id
-    http_requests.put(
-        "https://api.spotify.com/v1/me/player/seek",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.put(
+            "https://api.spotify.com/v1/me/player/seek",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
     return {"status": "ok"}
 
 
 @app.post("/spotify/pause")
-def spotify_pause():
+async def spotify_pause():
     """Pause playback on the stored device."""
-    token = _get_spotify_access_token()
+    token = await _get_spotify_access_token()
     device_id = spotify_state._spotify_device_id
     params = {"device_id": device_id} if device_id else {}
-    http_requests.put(
-        "https://api.spotify.com/v1/me/player/pause",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.put(
+            "https://api.spotify.com/v1/me/player/pause",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
     return {"status": "ok"}
 
 
 @app.post("/spotify/resume")
-def spotify_resume():
+async def spotify_resume():
     """Resume playback on the stored device."""
-    token = _get_spotify_access_token()
+    token = await _get_spotify_access_token()
     device_id = spotify_state._spotify_device_id
     params = {"device_id": device_id} if device_id else {}
-    http_requests.put(
-        "https://api.spotify.com/v1/me/player/play",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=5,
-    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.put(
+            "https://api.spotify.com/v1/me/player/play",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
     return {"status": "ok"}
 
 # Serve the Next.js static frontend (when deployed as unified container)
