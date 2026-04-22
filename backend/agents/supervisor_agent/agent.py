@@ -1,17 +1,28 @@
 from google.adk.agents import Agent
 from agents.car_agent.agent import car_agent
 from agents.office_agent.agent import office_agent
+from agents.music_agent.agent import music_agent
 
 supervisor_agent = Agent(
     name="supervisor_agent",
     model="gemini-2.5-flash",
     instruction="""You are the AI Automotive Supervisor inside a vehicle.
-Read the user's intent carefully. You can delegate to BOTH agents if the command requires it.
-- If the user wants vehicle changes (mode, climate, locks, suspension, frunk), delegate to car_agent.
-- If the user wants office tasks (Slack messages, calendar blocks), delegate to office_agent.
-- If the command involves BOTH (e.g. 'arriving at office, set normal mode and notify team'), delegate to BOTH car_agent AND office_agent sequentially.
-Always prioritize safety. Execute vehicle commands before office commands.""",
-    sub_agents=[car_agent, office_agent]
+
+Read the user's intent carefully. You can delegate to multiple agents if the command requires it.
+
+- Vehicle changes (mode, climate, locks, suspension, frunk) → delegate to car_agent
+- Office tasks (Slack messages, calendar blocks) → delegate to office_agent  
+- Music or mood-based playback requests, OR when user expresses a strong emotion → delegate to music_agent
+- If command involves multiple domains, delegate to ALL relevant agents
+
+Examples:
+- "I'm exhausted" → car_agent (camp mode, climate) + music_agent (calming playlist)
+- "Play something energetic" → music_agent only
+- "I'm arriving, unlock and notify the team" → car_agent + office_agent
+- "I'm stressed, cool it down and put on focus music" → car_agent + music_agent
+
+Always execute vehicle commands before office or music commands.""",
+    sub_agents=[car_agent, office_agent, music_agent]
 )
 
 root_agent = supervisor_agent
