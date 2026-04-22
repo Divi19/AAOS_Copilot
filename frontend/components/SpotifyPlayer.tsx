@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSpotifyToken, registerSpotifyDevice } from "../lib/api";
 
 // Minimal typings for the Spotify Web Playback SDK globals
@@ -27,15 +27,28 @@ interface SpotifySdkPlayer {
   addListener(event: "account_error", cb: (data: { message: string }) => void): void;
 }
 
-type PlayerStatus = "connecting" | "ready" | "error";
+export type PlayerStatus = "connecting" | "ready" | "error";
 
-export default function SpotifyPlayer() {
-  const [status, setStatus] = useState<PlayerStatus>("connecting");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+interface SpotifyPlayerProps {
+  onStatusChange?: (status: PlayerStatus, errorMessage?: string) => void;
+}
+
+export default function SpotifyPlayer({ onStatusChange }: SpotifyPlayerProps) {
+  const [, setStatus] = useState<PlayerStatus>("connecting");
+  // Keep a stable ref to the latest callback so the effect closure never goes stale
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => { onStatusChangeRef.current = onStatusChange; });
 
   useEffect(() => {
     let player: SpotifySdkPlayer | null = null;
     let cancelled = false;
+
+    function notify(status: PlayerStatus, errorMessage?: string) {
+      if (!cancelled) {
+        setStatus(status);
+        onStatusChangeRef.current?.(status, errorMessage);
+      }
+    }
 
     async function initPlayer() {
       let token: string;
@@ -44,8 +57,7 @@ export default function SpotifyPlayer() {
       } catch (err) {
         if (cancelled) return;
         console.error("[SpotifyPlayer] Failed to fetch access token:", err);
-        setStatus("error");
-        setErrorMessage("Could not fetch Spotify token");
+        notify("error", "Could not fetch Spotify token");
         return;
       }
 
@@ -62,32 +74,31 @@ export default function SpotifyPlayer() {
           if (cancelled) return;
           try {
             await registerSpotifyDevice(device_id);
-            setStatus("ready");
+            notify("ready");
           } catch (err) {
             console.error("[SpotifyPlayer] Failed to register device:", err);
-            setStatus("error");
-            setErrorMessage("Could not register device with backend");
+            notify("error", "Could not register device with backend");
           }
         });
 
         player.addListener("not_ready", ({ device_id }) => {
           console.warn("[SpotifyPlayer] Device went offline:", device_id);
-          if (!cancelled) setStatus("connecting");
+          notify("connecting");
         });
 
         player.addListener("initialization_error", ({ message }) => {
           console.error("[SpotifyPlayer] Init error:", message);
-          if (!cancelled) { setStatus("error"); setErrorMessage(message); }
+          notify("error", message);
         });
 
         player.addListener("authentication_error", ({ message }) => {
           console.error("[SpotifyPlayer] Auth error:", message);
-          if (!cancelled) { setStatus("error"); setErrorMessage(message); }
+          notify("error", message);
         });
 
         player.addListener("account_error", ({ message }) => {
           console.error("[SpotifyPlayer] Account error:", message);
-          if (!cancelled) { setStatus("error"); setErrorMessage(message); }
+          notify("error", message);
         });
 
         player.connect();
@@ -109,33 +120,6 @@ export default function SpotifyPlayer() {
     };
   }, []);
 
-  const label =
-    status === "ready"
-      ? "🎵 AAOS Audio Ready"
-      : status === "error"
-      ? `Audio error${errorMessage ? `: ${errorMessage}` : ""}`
-      : "Connecting audio...";
-
-  const color =
-    status === "ready" ? "#4edea3" : status === "error" ? "#ffb4ab" : "#8b90a0";
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "16px",
-        left: "16px",
-        fontSize: "10px",
-        fontWeight: 700,
-        letterSpacing: "0.1em",
-        color,
-        fontFamily: "Space Grotesk, system-ui",
-        opacity: 0.8,
-        pointerEvents: "none",
-        zIndex: 50,
-      }}
-    >
-      {label}
-    </div>
-  );
+  // No DOM output — status is surfaced via the onStatusChange callback to page.tsx
+  return null;
 }
