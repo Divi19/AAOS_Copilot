@@ -5,10 +5,13 @@ from state import get_state, reset_state
 import json
 import os
 import time
+import base64
+import requests as http_requests
 from typing import Optional, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+import spotify_state
 
 # CRITICAL: Load .env BEFORE importing ADK agents — they read env vars at import time
 load_dotenv()
@@ -248,6 +251,47 @@ async def execute_voice_command(voice: VoicePayload):
 @app.post("/vehicle/reset")
 def reset_vehicle_state():
     return reset_state().model_dump()
+
+
+# ── Spotify Web Playback SDK endpoints ──────────────────────────────────────
+
+class DevicePayload(BaseModel):
+    device_id: str
+
+
+@app.get("/spotify/token")
+def get_spotify_token():
+    """Returns a fresh Spotify access token using the stored refresh token."""
+    client_id = os.getenv("SPOTIFY_CLIENT_ID")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+    refresh_token = os.getenv("SPOTIFY_REFRESH_TOKEN")
+
+    if not all([client_id, client_secret, refresh_token]):
+        raise HTTPException(status_code=500, detail="Spotify credentials not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, and SPOTIFY_REFRESH_TOKEN.")
+
+    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    response = http_requests.post(
+        "https://accounts.spotify.com/api/token",
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=10,
+    )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Spotify token refresh failed: {response.text}")
+
+    return {"access_token": response.json()["access_token"]}
+
+
+@app.post("/spotify/device")
+def register_spotify_device(payload: DevicePayload):
+    """Stores the Spotify Web Playback SDK device_id from the browser player."""
+    spotify_state._spotify_device_id = payload.device_id
+    print(f"🎵 [SPOTIFY] Browser player registered with device_id: {payload.device_id}")
+    return {"status": "ok", "device_id": payload.device_id}
 
 # Serve the Next.js static frontend (when deployed as unified container)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
