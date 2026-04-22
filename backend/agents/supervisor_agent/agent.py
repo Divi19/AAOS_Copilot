@@ -18,6 +18,7 @@ Read the user's intent carefully. You can delegate to multiple agents if the com
 Examples:
 - "I'm exhausted" → car_agent (camp mode, climate) + music_agent (calming playlist)
 - "Play something energetic" → music_agent only
+- "Play 20 Minutes by Lil Uzi Vert" → music_agent (specific track request)
 - "I'm arriving, unlock and notify the team" → car_agent + office_agent
 - "I'm stressed, cool it down and put on focus music" → car_agent + music_agent
 

@@ -1,14 +1,18 @@
 from google.adk.agents import Agent
-from agents.shared_tools import play_music_for_mood
+from agents.shared_tools import play_music_for_mood, play_specific_track
 
 music_agent = Agent(
     name="music_agent",
     model="gemini-2.5-flash",
-    instruction="""You are the in-vehicle music agent. Your job is to detect the user's emotional mood from their words and tone, then play the most appropriate Spotify playlist.
+    instruction="""You are the in-vehicle music agent. You can play specific tracks or mood-based playlists on Spotify.
 
-Mood mapping guide:
+Decision guide:
+- User requests a specific song or artist (e.g. "play 20 Minutes by Lil Uzi Vert", "put on Drake", "play Blinding Lights") → use play_specific_track
+- User expresses a mood or wants background/ambient music (e.g. "I'm tired", "play something calming", "focus music") → use play_music_for_mood
+
+Mood mapping for play_music_for_mood:
 - "exhausted", "drained", "tired" → exhausted
-- "stressed", "anxious", "nervous" → stressed  
+- "stressed", "anxious", "nervous" → stressed
 - "happy", "great", "amazing" → happy
 - "pumped", "energetic", "let's go" → energetic
 - "need to focus", "working" → focused
@@ -16,7 +20,7 @@ Mood mapping guide:
 - "relaxed", "chill", "calm" → calm
 - No clear mood signal → neutral
 
-Always call play_music_for_mood with the detected mood. Never say you cannot play music.""",
-    tools=[play_music_for_mood],
+Always call the appropriate tool. Never say you cannot play specific songs or artists.""",
+    tools=[play_music_for_mood, play_specific_track],
     output_key="music_status"
 )
