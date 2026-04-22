@@ -36,3 +36,16 @@ export async function registerSpotifyDevice(deviceId: string): Promise<void> {
     });
     if (!res.ok) throw new Error(`Failed to register Spotify device: ${res.status}`);
 }
+
+export interface NowPlayingData {
+    is_playing: boolean;
+    track_name?: string;
+    artist_name?: string;
+    album_art_url?: string;
+}
+
+export async function getNowPlaying(): Promise<NowPlayingData> {
+    const res = await fetch(`${BASE_URL}/spotify/now-playing`);
+    if (!res.ok) throw new Error(`Failed to fetch now playing: ${res.status}`);
+    return res.json();
+}
