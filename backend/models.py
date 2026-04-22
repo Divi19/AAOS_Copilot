@@ -7,12 +7,17 @@ class VehicleState(BaseModel):
     climate_temp: float = 20.0
     battery_level: float = 80.0
     is_preconditioning: bool = False
-    destination: Optional[str] = None
+    destination: Optional[Any] = None
     scheduled_departure_time: Optional[str] = None
     vehicle_mode: str = "normal"
     frunk_open: bool = False
     trunk_open: bool = False
     suspension_level: str = "standard"
+
+class Location(BaseModel):
+    lat: float
+    lng: float
+    name: Optional[str] = None
 
 class Action(BaseModel):
     tool: str
