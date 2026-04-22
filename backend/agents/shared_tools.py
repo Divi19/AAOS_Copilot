@@ -4,6 +4,7 @@ from state import get_state
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
+import spotify_state
 
 def set_vehicle_mode(mode: str) -> str:
     """Sets the vehicle hardware mode (e.g. camp, dog, normal)."""
@@ -54,6 +55,12 @@ def play_music_for_mood(mood: str) -> str:
     """Plays a Spotify playlist matching the detected mood.
     Mood should be one of: exhausted, tired, stressed, happy, energetic, focused, sad, calm, neutral."""
     try:
+        device_id = spotify_state._spotify_device_id
+        if not device_id:
+            return "No browser player connected yet. Open the app in a browser first so the audio player can initialize."
+
+        print(f"🎵 [SPOTIFY] Using device_id: {device_id}")
+
         sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
             client_id=os.getenv("SPOTIFY_CLIENT_ID"),
             client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
@@ -61,11 +68,6 @@ def play_music_for_mood(mood: str) -> str:
             scope="user-modify-playback-state user-read-playback-state",
         ))
 
-        devices = sp.devices()
-        if not devices["devices"]:
-            return "No active Spotify device found. Open Spotify on your phone or laptop first."
-
-        device_id = devices["devices"][0]["id"]
         playlist_uri = MOOD_TO_PLAYLIST.get(mood.lower(), MOOD_TO_PLAYLIST["neutral"])
 
         sp.start_playback(device_id=device_id, context_uri=playlist_uri)
