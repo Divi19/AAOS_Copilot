@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getVehicleState, sendVoiceCommand, toggleConnectivity } from "../lib/api";
-import SpotifyPlayer from "../components/SpotifyPlayer";
+import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
+import NowPlaying from "../components/NowPlaying";
 
 interface SpeechRecognitionAPI extends EventTarget {
   continuous: boolean;
@@ -300,7 +301,12 @@ export default function Dashboard() {
   const [agentMessage, setAgentMessage] = useState("");
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [lastTools, setLastTools] = useState<{ agent: string; tool: string }[]>([]);
+  const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
+
+  const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
+    setAudioStatus(status);
+  }, []);
 
   useEffect(() => {
     const poll = async () => {
@@ -397,6 +403,17 @@ export default function Dashboard() {
                 {isCloud ? "Cloud Connected" : "Offline — Edge Mode"}
               </span>
             </div>
+            <div style={{ width: "1px", height: "16px", background: "rgba(65,71,84,0.4)" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
+              <span style={{
+                width: "6px", height: "6px", borderRadius: "50%",
+                background: audioStatus === "ready" ? "#4edea3" : audioStatus === "error" ? "#ffb4ab" : "#8b90a0",
+                boxShadow: audioStatus === "ready" ? "0 0 5px #4edea3" : audioStatus === "error" ? "0 0 5px #ffb4ab" : "none",
+              }} />
+              <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", color: "#c1c6d7", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>
+                {audioStatus === "ready" ? "AAOS Audio Ready" : audioStatus === "error" ? "Audio Error" : "Connecting Audio"}
+              </span>
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {backendError && <span style={{ fontSize: "10px", color: "#6b7280" }}>Backend unreachable</span>}
@@ -434,6 +451,11 @@ export default function Dashboard() {
             <div style={{ position: "absolute", bottom: "40px", right: "40px", width: "40px", height: "40px", borderRight: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 4px 0" }} />
 
             <CarVisualization state={vehicleState} />
+
+            {/* Now Playing — bottom left of canvas */}
+            <div style={{ position: "absolute", bottom: "40px", left: "40px", zIndex: 20 }}>
+              <NowPlaying />
+            </div>
 
             {/* Conversation panel */}
             {hasConversation && (
@@ -487,7 +509,7 @@ export default function Dashboard() {
 
         <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at center, transparent 0%, rgba(6,14,32,0.35) 100%)", zIndex: 10 }} />
 
-        <SpotifyPlayer />
+        <SpotifyPlayer onStatusChange={handleAudioStatusChange} />
 
         <style>{`
           @keyframes ping { 0%{transform:scale(1);opacity:0.8;} 80%,100%{transform:scale(1.5);opacity:0;} }
