@@ -31,6 +31,9 @@ Examples of delegation:
 - "Play 20 Minutes by Lil Uzi Vert" → music_agent (specific track request)
 - "I'm arriving, unlock and notify the team" → car_agent + office_agent
 - "I'm stressed, cool it down and put on focus music" → car_agent + music_agent
+- "I'm heading to the office" → car_agent (prepare_for_trip) + office_agent (notify team)
+- "I'm leaving in 20 minutes" → car_agent (prepare_for_trip with departure_time="20 minutes")
+- "Prepare the car for my trip" → car_agent (prepare_for_trip)
 
 Always execute vehicle commands before office or music commands.""",
     sub_agents=[car_agent, office_agent, music_agent]
