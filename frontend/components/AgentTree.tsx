@@ -35,12 +35,10 @@ function ConnectorLines({ n, color }: { n: number; color: string }) {
 }
 
 function AgentNode({
-  agentId,
   info,
   isRoot = false,
   isComingSoon = false,
 }: {
-  agentId: string;
   info: AgentInfo;
   isRoot?: boolean;
   isComingSoon?: boolean;
@@ -233,7 +231,7 @@ export default function AgentTree() {
       <div style={{ display: "flex", justifyContent: "center" }}>
         <div style={{ width: "140px" }}>
           {rootInfo && (
-            <AgentNode agentId={hierarchy.root} info={rootInfo} isRoot />
+            <AgentNode info={rootInfo} isRoot />
           )}
         </div>
       </div>
@@ -251,7 +249,7 @@ export default function AgentTree() {
               key={id}
               style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "stretch" }}
             >
-              <AgentNode agentId={id} info={info} />
+              <AgentNode info={info} />
             </div>
           ))}
         </div>
