@@ -75,3 +75,28 @@ export async function pauseTrack(): Promise<void> {
 export async function resumeTrack(): Promise<void> {
     await fetch(`${BASE_URL}/spotify/resume`, { method: "POST" });
 }
+
+export interface AgentInfo {
+    name: string;
+    icon: string;
+    description: string;
+    status: "active" | "coming_soon";
+    model: string;
+    type: string;
+    tools?: string[];
+}
+
+export interface AgentHierarchyData {
+    hierarchy: {
+        root: string;
+        active_sub_agents: string[];
+        planned_sub_agents: string[];
+    };
+    agents: Record<string, AgentInfo>;
+}
+
+export async function getAgentHierarchy(): Promise<AgentHierarchyData> {
+    const res = await fetch(`${BASE_URL}/agents`);
+    if (!res.ok) throw new Error(`Failed to fetch agent hierarchy: ${res.status}`);
+    return res.json();
+}
