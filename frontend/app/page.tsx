@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getVehicleState, sendVoiceCommand, toggleConnectivity } from "../lib/api";
 import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
 import NowPlaying from "../components/NowPlaying";
+import AgentTree from "../components/AgentTree";
 
 interface SpeechRecognitionAPI extends EventTarget {
   continuous: boolean;
@@ -299,8 +300,8 @@ export default function Dashboard() {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [agentMessage, setAgentMessage] = useState("");
+  const [lastExecutionTime, setLastExecutionTime] = useState<number | null>(null);
   const [tunnelLoading, setTunnelLoading] = useState(false);
-  const [lastTools, setLastTools] = useState<{ agent: string; tool: string }[]>([]);
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
 
@@ -342,8 +343,8 @@ export default function Dashboard() {
       setTranscript(text);
       sendVoiceCommand(text)
         .then((res) => {
-          if (res.tools_called) setLastTools(res.tools_called);
           if (res.message) setAgentMessage(res.message);
+          if (res.execution_time_seconds != null) setLastExecutionTime(res.execution_time_seconds);
         })
         .catch(() => { });
     };
@@ -469,14 +470,14 @@ export default function Dashboard() {
                 {agentMessage && (
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
-                    <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
-                  </div>
-                )}
-                {lastTools.length > 0 && (
-                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", paddingLeft: "23px" }}>
-                    {lastTools.map((t, i) => (
-                      <span key={i} style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "3px", background: "rgba(152,203,255,0.08)", border: "1px solid rgba(152,203,255,0.18)", color: "#98cbff", fontFamily: "Space Grotesk, system-ui", fontWeight: 600 }}>{t.agent} → {t.tool}</span>
-                    ))}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
+                      {lastExecutionTime != null && (
+                        <span style={{ fontSize: "10px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.04em" }}>
+                          Agent responded in {lastExecutionTime}s
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -505,6 +506,15 @@ export default function Dashboard() {
               </span>
             </div>
           </section>
+
+          {/* Right Sidebar — Agent Hierarchy */}
+          <aside style={{ width: "264px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderLeft: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px 14px", gap: "12px", overflowY: "auto" }}>
+            <div style={{ paddingLeft: "2px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>AGENT NETWORK</div>
+              <div style={{ fontSize: "9px", letterSpacing: "0.1em", color: "#a0a8bc", textTransform: "uppercase", marginTop: "2px", fontFamily: "Space Grotesk, system-ui" }}>CLICK NODE TO EXPAND</div>
+            </div>
+            <AgentTree />
+          </aside>
         </div>
 
         <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at center, transparent 0%, rgba(6,14,32,0.35) 100%)", zIndex: 10 }} />
