@@ -1,6 +1,7 @@
 from models import Action
 from executor import execute_action
 from state import get_state
+import os
 import spotipy
 import spotify_state  # shared device ID + access token cache
 
@@ -57,12 +58,72 @@ def prepare_for_trip(destination: str, departure_time: str = None) -> str:
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
 
 def send_slack_message(message: str) -> str:
-    """Sends a Slack message about arriving at the office or task completion."""
-    return f"Slack message sent: {message}"
+    """Sends a Slack message to the team channel. Include context such as who is arriving and when."""
+    try:
+        from slack_sdk import WebClient
+        from slack_sdk.errors import SlackApiError
+    except ImportError:
+        return "Slack is not configured (slack-sdk package missing)"
 
-def create_calendar_block(event_name: str, duration_minutes: int) -> str:
-    """Creates a calendar block for the user."""
-    return f"Calendar block created: {event_name} for {duration_minutes} minutes"
+    token = os.getenv("SLACK_BOT_TOKEN")
+    if not token:
+        return "Slack is not configured"
+
+    channel = os.getenv("SLACK_CHANNEL_ID", "#general")
+    channel_name = channel.lstrip("#")
+
+    print(f"📨 [SLACK] Sending to {channel}: {message}")
+    try:
+        client = WebClient(token=token)
+        client.chat_postMessage(channel=channel, text=message)
+        return f"Slack message sent to #{channel_name}: {message}"
+    except SlackApiError as e:
+        return f"Slack error: {e.response['error']}"
+    except Exception as e:
+        return f"Slack error: {str(e)}"
+
+
+def create_calendar_block(event_name: str, duration_minutes: int = 60) -> str:
+    """Creates a Google Calendar event for the user. Default duration is 60 minutes if not specified."""
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        return "Google Calendar is not configured (google-api-python-client package missing)"
+
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not sa_json:
+        return "Google Calendar is not configured"
+
+    calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+
+    try:
+        import json as _json
+        from datetime import datetime, timezone, timedelta
+
+        sa_info = _json.loads(sa_json)
+        scopes = ["https://www.googleapis.com/auth/calendar"]
+        credentials = service_account.Credentials.from_service_account_info(sa_info, scopes=scopes)
+
+        service = build("calendar", "v3", credentials=credentials)
+
+        now = datetime.now(timezone.utc)
+        end_time = now + timedelta(minutes=duration_minutes)
+        start_str = now.isoformat()
+        end_str = end_time.isoformat()
+
+        event = {
+            "summary": event_name,
+            "start": {"dateTime": start_str},
+            "end": {"dateTime": end_str},
+        }
+
+        print(f"📅 [CALENDAR] Creating event: '{event_name}' for {duration_minutes} minutes starting at {start_str}")
+
+        service.events().insert(calendarId=calendar_id, body=event).execute()
+        return f"Calendar block created: {event_name} for {duration_minutes} minutes starting at {start_str}"
+    except Exception as e:
+        return f"Google Calendar error: {str(e)}"
 
 MOOD_TO_PLAYLIST = {
     "exhausted": "spotify:playlist:37i9dQZF1DWZd79rJ6a7lp",
