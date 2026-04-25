@@ -29,6 +29,33 @@ def set_suspension(level: str) -> str:
     result = execute_action(Action(tool="setSuspension", parameters={"level": level}), get_state())
     return result.message
 
+def precondition_battery(enabled: bool) -> str:
+    """Starts or stops battery preconditioning to warm/cool the battery pack for optimal range and charging speed."""
+    result = execute_action(Action(tool="preconditionBattery", parameters={"enabled": enabled}), get_state())
+    return result.message
+
+def schedule_departure(time: str) -> str:
+    """Schedules a departure time so the vehicle is ready to go at that time (e.g. '8:30am', '9:00 PM')."""
+    result = execute_action(Action(tool="scheduleDeparture", parameters={"time": time}), get_state())
+    return result.message
+
+def prepare_for_trip(destination: str, departure_time: str = None) -> str:
+    """Prepares the vehicle for a trip: preconditions battery, sets climate to 22°C, and unlocks the vehicle.
+    Optionally schedules a departure time. Call this when the user says they are heading somewhere,
+    leaving, or about to depart — even if they don't list each action individually."""
+    precondition_battery(True)
+    set_climate(on=True, temp=22.0)
+    lock_vehicle(False)
+
+    summary_parts = ["battery preconditioning started", "climate set to 22°C", "vehicle unlocked"]
+
+    if departure_time:
+        schedule_departure(departure_time)
+        summary_parts.append(f"departure scheduled for {departure_time}")
+
+    destination_str = f" to {destination}" if destination else ""
+    return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
+
 def send_slack_message(message: str) -> str:
     """Sends a Slack message about arriving at the office or task completion."""
     return f"Slack message sent: {message}"
