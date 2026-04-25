@@ -218,9 +218,6 @@ export default function AgentTree() {
   const activeChildren = hierarchy.active_sub_agents
     .map((id) => ({ id, info: agents[id] }))
     .filter((a) => a.info);
-  const plannedChildren = hierarchy.planned_sub_agents
-    .map((id) => ({ id, info: agents[id] }))
-    .filter((a) => a.info);
   const lineColor = "#98cbff";
 
   return (
@@ -258,47 +255,6 @@ export default function AgentTree() {
             </div>
           ))}
         </div>
-      )}
-
-      {/* Coming soon divider */}
-      {plannedChildren.length > 0 && (
-        <>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "14px",
-              marginBottom: "6px",
-            }}
-          >
-            <div style={{ flex: 1, height: "1px", background: "rgba(65,71,84,0.25)" }} />
-            <span
-              style={{
-                fontSize: "8px",
-                fontWeight: 700,
-                letterSpacing: "0.15em",
-                color: "#8b90a0",
-                fontFamily: "Space Grotesk, system-ui",
-                flexShrink: 0,
-              }}
-            >
-              COMING SOON
-            </span>
-            <div style={{ flex: 1, height: "1px", background: "rgba(65,71,84,0.25)" }} />
-          </div>
-
-          <div style={{ display: "flex", gap: "5px" }}>
-            {plannedChildren.map(({ id, info }) => (
-              <div
-                key={id}
-                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "stretch" }}
-              >
-                <AgentNode agentId={id} info={info} isComingSoon />
-              </div>
-            ))}
-          </div>
-        </>
       )}
     </div>
   );
