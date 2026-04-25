@@ -82,6 +82,15 @@ AGENT_REGISTRY = {
         "type": "specialist",
         "tools": ["send_slack_message", "create_calendar_block"]
     },
+    "music_agent": {
+        "name": "Music Agent",
+        "icon": "music_note",
+        "description": "Controls mood-based and specific music playback via Spotify",
+        "status": "active",
+        "model": "gemini-2.5-flash",
+        "type": "specialist",
+        "tools": ["play_music_for_mood", "play_specific_track"]
+    },
     "rental_agent": {
         "name": "Rental Agent",
         "icon": "car_rental",
@@ -125,7 +134,7 @@ def get_agent_registry():
     return {
         "hierarchy": {
             "root": "supervisor_agent",
-            "active_sub_agents": ["car_agent", "office_agent"],
+            "active_sub_agents": ["car_agent", "office_agent", "music_agent"],
             "planned_sub_agents": ["rental_agent", "truck_agent", "fleet_agent"]
         },
         "agents": AGENT_REGISTRY
