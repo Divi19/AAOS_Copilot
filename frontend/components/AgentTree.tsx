@@ -128,7 +128,6 @@ function AgentNode({
           letterSpacing: "0.06em",
           lineHeight: 1.2,
           width: "100%",
-          textAlign: "center",
         } as React.CSSProperties}
       >
         {info.name.toUpperCase()}
