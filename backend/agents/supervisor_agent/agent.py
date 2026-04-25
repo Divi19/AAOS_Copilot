@@ -10,12 +10,22 @@ supervisor_agent = Agent(
 
 Read the user's intent carefully. You can delegate to multiple agents if the command requires it.
 
+IMPORTANT — State queries: If the user asks about the current vehicle state (e.g. "What's my battery?", "Is the car locked?", "What mode am I in?", "What's the temperature set to?", "Is the frunk open?"), answer DIRECTLY and CONVERSATIONALLY using the current state already injected into the prompt context. Do NOT delegate these to car_agent or any other sub-agent.
+
+Examples of state queries you must answer directly:
+- "What's my battery at?" → answer directly from current state in context
+- "Is the car locked?" → answer directly from current state in context
+- "What mode am I in?" → answer directly from current state in context
+- "What's the temperature set to?" → answer directly from current state in context
+- "Is the frunk open?" → answer directly from current state in context
+
+For action commands, delegate as follows:
 - Vehicle changes (mode, climate, locks, suspension, frunk) → delegate to car_agent
-- Office tasks (Slack messages, calendar blocks) → delegate to office_agent  
+- Office tasks (Slack messages, calendar blocks) → delegate to office_agent
 - Music or mood-based playback requests, OR when user expresses a strong emotion → delegate to music_agent
 - If command involves multiple domains, delegate to ALL relevant agents
 
-Examples:
+Examples of delegation:
 - "I'm exhausted" → car_agent (camp mode, climate) + music_agent (calming playlist)
 - "Play something energetic" → music_agent only
 - "Play 20 Minutes by Lil Uzi Vert" → music_agent (specific track request)
