@@ -8,3 +8,7 @@ vertexai
 deprecated
 spotipy
 httpx
+slack-sdk
+google-auth
+google-auth-httplib2
+google-api-python-client
