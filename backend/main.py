@@ -24,6 +24,9 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from agents.supervisor_agent.agent import supervisor_agent
+from agents.car_agent.agent import car_agent
+from agents.office_agent.agent import office_agent
+from agents.music_agent.agent import music_agent
 
 app = FastAPI(title="AAOS AI Copilot Backend")
 
@@ -47,12 +50,123 @@ try:
 except Exception as e:
     print(f"Warning: Vertex AI not fully configured: {e}")
 
-session_service = InMemorySessionService()
+# === PARALLEL AGENT INFRASTRUCTURE ===
+# Each agent gets its own Runner + InMemorySessionService so concurrent requests
+# never share session state across agents or across calls to the same agent.
+
+supervisor_session_service = InMemorySessionService()
+supervisor_runner = Runner(agent=supervisor_agent, app_name="vehicle_copilot", session_service=supervisor_session_service)
+
+car_session_service = InMemorySessionService()
+office_session_service = InMemorySessionService()
+music_session_service = InMemorySessionService()
+
+car_runner = Runner(agent=car_agent, app_name="vehicle_copilot", session_service=car_session_service)
+office_runner = Runner(agent=office_agent, app_name="vehicle_copilot", session_service=office_session_service)
+music_runner = Runner(agent=music_agent, app_name="vehicle_copilot", session_service=music_session_service)
+
+AGENT_RUNNERS: Dict[str, Runner] = {
+    "car_agent": car_runner,
+    "office_agent": office_runner,
+    "music_agent": music_runner,
+}
+AGENT_SESSION_SERVICES: Dict[str, InMemorySessionService] = {
+    "car_agent": car_session_service,
+    "office_agent": office_session_service,
+    "music_agent": music_session_service,
+}
 
 # Accept BOTH formats: frontend sends {transcript}, old UI sends {prompt}
 class VoicePayload(BaseModel):
     prompt: Optional[str] = None
     transcript: Optional[str] = None
+
+
+async def run_agent(agent_name: str, context_str: str, start_time: float) -> dict:
+    """Run a single specialist agent and return its results. Never raises — errors are caught and returned."""
+    try:
+        runner = AGENT_RUNNERS[agent_name]
+        session_svc = AGENT_SESSION_SERVICES[agent_name]
+        session = session_svc.create_session(app_name="vehicle_copilot", user_id="demo_user")
+
+        final_text = ""
+        tools_called = []
+        agent_trace = []
+        current_agent = agent_name
+
+        async for event in runner.run_async(
+            user_id="demo_user",
+            session_id=session.id,
+            new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
+        ):
+            if hasattr(event, 'agent_name') and event.agent_name and event.agent_name != 'unknown':
+                current_agent = event.agent_name
+
+            tool_name = None
+            tool_args = {}
+
+            # Method 1: Direct tool_call attribute
+            if hasattr(event, 'tool_call') and event.tool_call:
+                tool_name = event.tool_call.name
+                tool_args = dict(event.tool_call.args) if hasattr(event.tool_call, 'args') and event.tool_call.args else {}
+
+            # Method 2: function_call inside content parts
+            if not tool_name and hasattr(event, 'content') and event.content:
+                for part in (event.content.parts or []):
+                    if hasattr(part, 'function_call') and part.function_call:
+                        tool_name = part.function_call.name
+                        tool_args = dict(part.function_call.args) if hasattr(part.function_call, 'args') and part.function_call.args else {}
+                        break
+
+            # Method 3: function_response parts (tool results)
+            if hasattr(event, 'content') and event.content:
+                for part in (event.content.parts or []):
+                    if hasattr(part, 'function_response') and part.function_response:
+                        agent_trace.append({
+                            "type": "tool_result",
+                            "agent": current_agent,
+                            "tool": part.function_response.name,
+                            "status": "success",
+                            "timestamp": round(time.time() - start_time, 2)
+                        })
+
+            if tool_name:
+                print(f"🔧 [TOOL CALLED by {current_agent}]: {tool_name}({tool_args})")
+                tools_called.append({"agent": current_agent, "tool": tool_name, "args": tool_args})
+                agent_trace.append({
+                    "type": "tool_call",
+                    "agent": current_agent,
+                    "tool": tool_name,
+                    "args": tool_args,
+                    "timestamp": round(time.time() - start_time, 2)
+                })
+            else:
+                if not any(t.get('agent') == current_agent and t.get('type') == 'activation' for t in agent_trace):
+                    agent_trace.append({
+                        "type": "activation",
+                        "agent": current_agent,
+                        "timestamp": round(time.time() - start_time, 2)
+                    })
+
+            if event.is_final_response():
+                final_text = event.content.parts[0].text if event.content and event.content.parts else ""
+                print(f"✔ [{agent_name}] Final: {final_text[:120]}")
+
+        return {
+            "agent": agent_name,
+            "message": final_text,
+            "tools_called": tools_called,
+            "agent_trace": agent_trace,
+        }
+
+    except Exception as e:
+        print(f"❌ [{agent_name}] Error: {str(e)}")
+        return {
+            "agent": agent_name,
+            "message": f"Agent error: {str(e)}",
+            "tools_called": [],
+            "agent_trace": [],
+        }
 
 # === AGENT HIERARCHY METADATA (for frontend Agent Info Panel) ===
 AGENT_REGISTRY = {
@@ -143,16 +257,13 @@ def get_agent_registry():
 @app.post("/vehicle/voice")
 async def execute_voice_command(voice: VoicePayload):
     start_time = time.time()
-    
-    # Accept either field name from the frontend
+
     user_text = voice.prompt or voice.transcript or ""
-    
     if not user_text.strip():
         raise HTTPException(status_code=400, detail="No voice input provided. Send 'prompt' or 'transcript'.")
-    
+
     print(f"\n🎙️ [INCOMING VOICE PROMPT]: {user_text}")
-    
-    # Pre-injecting driver memory and current state into the agent context
+
     driver_memory = {
         "name": "Leo",
         "preferences": {
@@ -161,97 +272,107 @@ async def execute_voice_command(voice: VoicePayload):
             "slack_channel": "#office-arrivals"
         }
     }
-    
+
     context_str = f"Current State: {get_state().model_dump_json()}\nDriver Memory: {json.dumps(driver_memory)}\nUser Request: {user_text}"
 
     try:
-        session = session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
-        runner = Runner(agent=supervisor_agent, app_name="vehicle_copilot", session_service=session_service)
-        
-        final_answer = ""
-        tools_called = []
-        agent_trace = []  # Detailed trace for the frontend panel
-        
-        current_agent = "supervisor_agent"
-        async for event in runner.run_async(
+        # ── Step 1: Supervisor classification ────────────────────────────────
+        sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
+        sup_response = ""
+
+        async for event in supervisor_runner.run_async(
             user_id="demo_user",
-            session_id=session.id,
+            session_id=sup_session.id,
             new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
         ):
-            # Update the current agent if the event provides a name
-            if hasattr(event, 'agent_name') and event.agent_name and event.agent_name != 'unknown':
-                current_agent = event.agent_name
-
-            agent_name = current_agent
-            
-            # Track tool calls — handle multiple ADK event formats
-            tool_name = None
-            tool_args = {}
-            
-            # Method 1: Direct tool_call attribute
-            if hasattr(event, 'tool_call') and event.tool_call:
-                tool_name = event.tool_call.name
-                tool_args = dict(event.tool_call.args) if hasattr(event.tool_call, 'args') and event.tool_call.args else {}
-            
-            # Method 2: Check content parts for function_call
-            if not tool_name and hasattr(event, 'content') and event.content:
-                for part in (event.content.parts or []):
-                    if hasattr(part, 'function_call') and part.function_call:
-                        tool_name = part.function_call.name
-                        tool_args = dict(part.function_call.args) if hasattr(part.function_call, 'args') and part.function_call.args else {}
-                        break
-            
-            # Method 3: Check for function_response parts (tool results)
-            if hasattr(event, 'content') and event.content:
-                for part in (event.content.parts or []):
-                    if hasattr(part, 'function_response') and part.function_response:
-                        resp_name = part.function_response.name
-                        agent_trace.append({
-                            "type": "tool_result",
-                            "agent": agent_name,
-                            "tool": resp_name,
-                            "status": "success",
-                            "timestamp": round(time.time() - start_time, 2)
-                        })
-            
-            if tool_name:
-                print(f"🔧 [TOOL CALLED by {agent_name}]: {tool_name}({tool_args})")
-                tools_called.append({"agent": agent_name, "tool": tool_name, "args": tool_args})
-                agent_trace.append({
-                    "type": "tool_call",
-                    "agent": agent_name,
-                    "tool": tool_name,
-                    "args": tool_args,
-                    "timestamp": round(time.time() - start_time, 2)
-                })
-            elif agent_name != 'unknown':
-                # Track agent activations (delegation events)
-                if not any(t.get('agent') == agent_name and t.get('type') == 'activation' for t in agent_trace):
-                    agent_trace.append({
-                        "type": "activation",
-                        "agent": agent_name,
-                        "timestamp": round(time.time() - start_time, 2)
-                    })
-            
             if event.is_final_response():
-                final_text = event.content.parts[0].text if event.content and event.content.parts else ""
-                print(f"🧠 [FINAL DECISION]: {final_text}")
-                final_answer = final_text
-        
+                sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
+
+        sup_response = sup_response.strip()
+        # Strip markdown code fences if the model wraps its output
+        if sup_response.startswith("```"):
+            lines = sup_response.splitlines()
+            sup_response = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
+
+        print(f"🧭 [SUPERVISOR] Classification: {sup_response}")
+
+        # ── Step 2: Parse classification ─────────────────────────────────────
+        agent_names: List[str] = []
+        direct_answer: Optional[str] = None
+
+        try:
+            parsed = json.loads(sup_response)
+            if isinstance(parsed, list):
+                agent_names = [n for n in parsed if n in AGENT_RUNNERS]
+            elif isinstance(parsed, dict) and "direct_answer" in parsed:
+                direct_answer = parsed["direct_answer"]
+        except (json.JSONDecodeError, ValueError):
+            # Non-JSON → supervisor answered conversationally (state query)
+            if sup_response:
+                direct_answer = sup_response
+
+        # ── Step 3: Direct answers (state queries) ───────────────────────────
+        if direct_answer is not None:
+            execution_time = round(time.time() - start_time, 2)
+            print(f"💬 [DIRECT ANSWER] ({execution_time}s): {direct_answer}")
+            return {
+                "intent": "direct_answer",
+                "confidence": 1.0,
+                "message": direct_answer,
+                "tools_called": [],
+                "agent_trace": [],
+                "execution_time_seconds": execution_time,
+                "actions": [],
+                "final_state": get_state().model_dump()
+            }
+
+        # Fallback if supervisor returned empty or only unknown agent names
+        if not agent_names:
+            print("⚠️ [SUPERVISOR] Empty or unrecognized classification — falling back to car_agent")
+            agent_names = ["car_agent"]
+
+        # ── Step 4: Parallel agent execution ─────────────────────────────────
+        print(f"🚀 [PARALLEL] Firing agents: {agent_names}")
+
+        tasks = [
+            asyncio.wait_for(run_agent(name, context_str, start_time), timeout=30)
+            for name in agent_names
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        parallel_time = round(time.time() - start_time, 2)
+        print(f"✅ [PARALLEL] All agents completed in {parallel_time}s")
+
+        # ── Step 5: Merge results ─────────────────────────────────────────────
+        all_tools_called: List[Dict[str, Any]] = []
+        all_agent_trace: List[Dict[str, Any]] = []
+        all_messages: List[str] = []
+
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"❌ [PARALLEL] Agent raised exception: {result}")
+                continue
+            all_tools_called.extend(result.get("tools_called", []))
+            all_agent_trace.extend(result.get("agent_trace", []))
+            msg = result.get("message", "").strip()
+            if msg:
+                all_messages.append(msg)
+
+        combined_message = " ".join(all_messages)
         execution_time = round(time.time() - start_time, 2)
-        print(f"⏱️ Total execution: {execution_time}s | Tools: {len(tools_called)}")
-        
+        print(f"⏱️ Total execution: {execution_time}s | Tools: {len(all_tools_called)}")
+
         return {
             "intent": "multi_agent_execution",
             "confidence": 1.0,
-            "message": final_answer,
-            "tools_called": tools_called,
-            "agent_trace": agent_trace,
+            "message": combined_message,
+            "tools_called": all_tools_called,
+            "agent_trace": all_agent_trace,
             "execution_time_seconds": execution_time,
-            "actions": [{"action": t["tool"], "value": "executed"} for t in tools_called],
+            "actions": [{"action": t["tool"], "value": "executed"} for t in all_tools_called],
             "final_state": get_state().model_dump()
         }
-        
+
     except Exception as e:
         execution_time = round(time.time() - start_time, 2)
         print(f"ERROR ({execution_time}s): {str(e)}")
