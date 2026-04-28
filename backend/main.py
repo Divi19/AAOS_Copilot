@@ -76,18 +76,35 @@ AGENT_SESSION_SERVICES: Dict[str, InMemorySessionService] = {
     "music_agent": music_session_service,
 }
 
+# Driver profile injected into every agent context
+DRIVER_MEMORY = {
+    "name": "Leo",
+    "preferences": {
+        "climate_hot": 22.0,
+        "climate_cold": 28.0,
+        "slack_channel": "#office-arrivals"
+    }
+}
+
 # Accept BOTH formats: frontend sends {transcript}, old UI sends {prompt}
 class VoicePayload(BaseModel):
     prompt: Optional[str] = None
     transcript: Optional[str] = None
 
 
-async def run_agent(agent_name: str, context_str: str, start_time: float) -> dict:
-    """Run a single specialist agent and return its results. Never raises — errors are caught and returned."""
+async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict:
+    """Run a single specialist agent with its targeted sub-prompt. Never raises — errors are caught and returned."""
     try:
         runner = AGENT_RUNNERS[agent_name]
         session_svc = AGENT_SESSION_SERVICES[agent_name]
         session = session_svc.create_session(app_name="vehicle_copilot", user_id="demo_user")
+
+        # Each agent gets current state + driver memory, but only its own isolated sub-prompt
+        agent_msg = (
+            f"Current State: {get_state().model_dump_json()}\n"
+            f"Driver Memory: {json.dumps(DRIVER_MEMORY)}\n"
+            f"Your task: {sub_prompt}"
+        )
 
         final_text = ""
         tools_called = []
@@ -97,7 +114,7 @@ async def run_agent(agent_name: str, context_str: str, start_time: float) -> dic
         async for event in runner.run_async(
             user_id="demo_user",
             session_id=session.id,
-            new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
+            new_message=types.Content(role="user", parts=[types.Part(text=agent_msg)])
         ):
             if hasattr(event, 'agent_name') and event.agent_name and event.agent_name != 'unknown':
                 current_agent = event.agent_name
@@ -264,19 +281,15 @@ async def execute_voice_command(voice: VoicePayload):
 
     print(f"\n🎙️ [INCOMING VOICE PROMPT]: {user_text}")
 
-    driver_memory = {
-        "name": "Leo",
-        "preferences": {
-            "climate_hot": 22.0,
-            "climate_cold": 28.0,
-            "slack_channel": "#office-arrivals"
-        }
-    }
-
-    context_str = f"Current State: {get_state().model_dump_json()}\nDriver Memory: {json.dumps(driver_memory)}\nUser Request: {user_text}"
+    # Supervisor gets the full context including raw user request for accurate classification
+    context_str = (
+        f"Current State: {get_state().model_dump_json()}\n"
+        f"Driver Memory: {json.dumps(DRIVER_MEMORY)}\n"
+        f"User Request: {user_text}"
+    )
 
     try:
-        # ── Step 1: Supervisor classification ────────────────────────────────
+        # ── Step 1: Supervisor classification + decomposition ─────────────────
         sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
         sup_response = ""
 
@@ -297,15 +310,21 @@ async def execute_voice_command(voice: VoicePayload):
         print(f"🧭 [SUPERVISOR] Classification: {sup_response}")
 
         # ── Step 2: Parse classification ─────────────────────────────────────
-        agent_names: List[str] = []
+        # agent_tasks: {agent_name → sub_prompt}
+        agent_tasks: Dict[str, str] = {}
         direct_answer: Optional[str] = None
 
         try:
             parsed = json.loads(sup_response)
-            if isinstance(parsed, list):
-                agent_names = [n for n in parsed if n in AGENT_RUNNERS]
-            elif isinstance(parsed, dict) and "direct_answer" in parsed:
-                direct_answer = parsed["direct_answer"]
+            if isinstance(parsed, dict):
+                # Extract valid agent sub-prompts (ignore unknown keys)
+                agent_tasks = {k: v for k, v in parsed.items() if k in AGENT_RUNNERS and isinstance(v, str)}
+                # direct_answer only applies when there are no agent tasks
+                if not agent_tasks and "direct_answer" in parsed:
+                    direct_answer = str(parsed["direct_answer"])
+            elif isinstance(parsed, list):
+                # Backward compat: plain list with no sub-prompts — use original user text
+                agent_tasks = {n: user_text for n in parsed if n in AGENT_RUNNERS}
         except (json.JSONDecodeError, ValueError):
             # Non-JSON → supervisor answered conversationally (state query)
             if sup_response:
@@ -326,17 +345,17 @@ async def execute_voice_command(voice: VoicePayload):
                 "final_state": get_state().model_dump()
             }
 
-        # Fallback if supervisor returned empty or only unknown agent names
-        if not agent_names:
+        # Fallback if supervisor returned empty or only unknown agents
+        if not agent_tasks:
             print("⚠️ [SUPERVISOR] Empty or unrecognized classification — falling back to car_agent")
-            agent_names = ["car_agent"]
+            agent_tasks = {"car_agent": user_text}
 
         # ── Step 4: Parallel agent execution ─────────────────────────────────
-        print(f"🚀 [PARALLEL] Firing agents: {agent_names}")
+        print(f"🚀 [PARALLEL] Firing agents: {list(agent_tasks.keys())}")
 
         tasks = [
-            asyncio.wait_for(run_agent(name, context_str, start_time), timeout=30)
-            for name in agent_names
+            asyncio.wait_for(run_agent(name, sub_prompt, start_time), timeout=30)
+            for name, sub_prompt in agent_tasks.items()
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
