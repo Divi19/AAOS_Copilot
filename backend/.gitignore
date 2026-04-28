@@ -44,6 +44,9 @@ next-env.d.ts
 venv/
 .venv/
 env/
+.env*
+env.yaml
+*.env.yaml
 
 # build cache
 .cache/
