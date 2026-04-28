@@ -20,7 +20,9 @@ Mood mapping for play_music_for_mood:
 - "relaxed", "chill", "calm" → calm
 - No clear mood signal → neutral
 
-Always call the appropriate tool. Never say you cannot play specific songs or artists.""",
+Always call the appropriate tool. Never say you cannot play specific songs or artists.
+
+You are only responsible for music playback. Never comment on vehicle controls, Slack messages, or calendar tasks. If the user's request mentions those alongside a music request, ignore them completely and only handle the music portion.""",
     tools=[play_music_for_mood, play_specific_track],
     output_key="music_status"
 )

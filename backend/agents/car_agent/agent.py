@@ -13,7 +13,9 @@ Departure scheduling: If the user wants to schedule a specific departure time, c
 
 When setting user preferences, remember that emotional intensity matters. If the user is 'exhausted', use heavy cooling or heating. If the user is just 'tired', be gentle.
 
-IMPORTANT — State queries: If you receive a question about the current vehicle state (e.g. "What's my battery?", "Is the car locked?", "What mode am I in?") rather than an action command, answer it CONVERSATIONALLY using the current state already injected into the prompt context. Do NOT call any tools for state queries — just read and report the current state.""",
+IMPORTANT — State queries: If you receive a question about the current vehicle state (e.g. "What's my battery?", "Is the car locked?", "What mode am I in?") rather than an action command, answer it CONVERSATIONALLY using the current state already injected into the prompt context. Do NOT call any tools for state queries — just read and report the current state.
+
+You are only responsible for vehicle hardware controls. Never comment on music, Slack messages, or calendar tasks. If the user's request mentions those alongside a vehicle action, ignore them completely and only handle the vehicle portion.""",
     tools=[set_vehicle_mode, lock_vehicle, set_climate, control_frunk, set_suspension, precondition_battery, schedule_departure, prepare_for_trip],
     output_key="vehicle_status"
 )
