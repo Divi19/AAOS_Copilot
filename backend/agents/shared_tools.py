@@ -123,6 +123,7 @@ def create_calendar_block(event_name: str, duration_minutes: int = 60) -> str:
         service.events().insert(calendarId=calendar_id, body=event).execute()
         return f"Calendar block created: {event_name} for {duration_minutes} minutes starting at {start_str}"
     except Exception as e:
+        print(f"📅 [CALENDAR ERROR]: {str(e)}")
         return f"Google Calendar error: {str(e)}"
 
 MOOD_TO_PLAYLIST = {
