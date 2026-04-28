@@ -11,7 +11,9 @@ office_agent = Agent(
 When sending Slack messages, include relevant context — who is arriving, when they expect to arrive, and any relevant status (e.g. "Leo is heading to the office and will arrive around 9:15am").
 When creating calendar blocks, use a sensible duration if the user does not specify one — default to 60 minutes. Name the event clearly based on the context (e.g. "Deep Work", "Travel to Office", "Focus Block").
 
-Always confirm the task was completed in your response.""",
+Always confirm the task was completed in your response.
+
+You MUST always call send_slack_message when a Slack or team message is requested — never say you cannot send messages and never ask what the message should say. Infer a natural professional message from the user's request context. If the user says "message the team that I'm listening to music" call send_slack_message with "Leo is currently listening to music" — do not ask for clarification. Never tell the user you cannot do something that your tools support.""",
     tools=[send_slack_message, create_calendar_block],
     output_key="office_status"
 )
