@@ -14,10 +14,11 @@ interface SpeechRecognitionAPI extends EventTarget {
   stop(): void;
   onresult: ((event: SpeechRecognitionEventAPI) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
 }
 interface SpeechRecognitionEventAPI {
-  results: { 0: { 0: { transcript: string } } };
+  resultIndex: number;
+  results: { [key: number]: { isFinal: boolean; 0: { transcript: string } }; length: number };
 }
 interface WindowWithSpeech extends Window {
   SpeechRecognition?: new () => SpeechRecognitionAPI;
@@ -60,8 +61,8 @@ function getSuspColor(level: string | undefined): string {
 
 function getSuspWheelColor(level: string | undefined): string {
   switch (level?.toLowerCase()) {
-    case "low": return "#8b90a0";   // default — no special color
-    case "high": return "#4edea3";  // teal for raised
+    case "low": return "#8b90a0";
+    case "high": return "#4edea3";
     case "standard": return "#8b90a0";
     default: return "#8b90a0";
   }
@@ -86,15 +87,13 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
   const climateTemp = state?.climate_temp ?? 22;
   const wheelColor = getSuspWheelColor(state?.suspension_level);
 
-  // Climate: cold = blue tint on windshield, hot = yellow/amber tint
-  // Both should be clearly visible
   const isHot = climateTemp > 23;
   const climateColor = isHot ? "#fbbf24" : "#60a5fa";
   const climateOpacity = climateOn
     ? climateTemp < 18 ? 0.65
       : climateTemp < 22 ? 0.55
         : climateTemp < 26 ? 0.5
-          : 0.6   // hot is also clearly visible
+          : 0.6
     : 0;
 
   return (
@@ -142,7 +141,6 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         .climateFlow { animation: climateFlow 2.5s ease-in-out infinite; }
       `}</style>
 
-      {/* HUD corner brackets */}
       <line x1={8} y1={20} x2={8} y2={38} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
       <line x1={8} y1={20} x2={26} y2={20} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
       <line x1={212} y1={20} x2={212} y2={38} stroke="#98cbff" strokeWidth="1" opacity="0.4" />
@@ -154,7 +152,6 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <line x1={16} y1={80} x2={16} y2={320} stroke="#98cbff" strokeWidth="0.4" strokeDasharray="3 9" opacity="0.3" />
       <line x1={204} y1={80} x2={204} y2={320} stroke="#98cbff" strokeWidth="0.4" strokeDasharray="3 9" opacity="0.3" />
 
-      {/* Wheels */}
       <rect x={8 - suspensionGap} y={80} width={30} height={70} rx={9} fill="#0f1c35" stroke={wheelColor} strokeWidth="1.5" />
       <circle cx={23 - suspensionGap} cy={115} r={11} fill="#1a2744" stroke={wheelColor} strokeWidth="0.8" />
       <line x1={23 - suspensionGap} y1={104} x2={23 - suspensionGap} y2={115} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
@@ -179,13 +176,11 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
       <line x1={186 + suspensionGap} y1={285} x2={208 + suspensionGap} y2={285} stroke={wheelColor} strokeWidth="0.6" opacity="0.7" />
       <circle cx={197 + suspensionGap} cy={285} r={3.5} fill="#060e20" />
 
-      {/* Car body */}
       <path d="M 110 42 C 85 42, 55 52, 42 68 C 32 80, 30 96, 30 110 L 30 290 C 30 310, 32 326, 42 336 C 55 352, 85 360, 110 360 C 135 360, 165 352, 178 336 C 188 326, 190 310, 190 290 L 190 110 C 190 96, 188 80, 178 68 C 165 52, 135 42, 110 42 Z"
         fill="url(#bodyGrad)" stroke="#2d3449" strokeWidth="1.5" filter="url(#carShadow)" />
       <path d="M 110 52 C 88 52, 61 61, 49 75 C 40 86, 38 100, 38 113 L 38 287 C 38 306, 40 320, 49 329 C 61 343, 88 350, 110 350 C 132 350, 159 343, 171 329 C 180 320, 182 306, 182 287 L 182 113 C 182 100, 180 86, 171 75 C 159 61, 132 52, 110 52 Z"
         fill="none" stroke="#1e293b" strokeWidth="0.6" opacity="0.6" />
 
-      {/* Hood / frunk */}
       {frunkOpen ? (
         <>
           <rect x={58} y={58} width={104} height={44} rx={8} fill="#003354" stroke="#98cbff" strokeWidth="1.2" className="frunkGlowAnim" />
@@ -199,21 +194,17 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Headlights */}
       <ellipse cx={68} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <ellipse cx={152} cy={72} rx={28} ry={12} fill="url(#hlGlow)" />
       <rect x={48} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={67} width={28} height={10} rx={3} fill="#98cbff" opacity="0.9" filter="url(#lightGlow)" />
       <line x1={76} y1={72} x2={144} y2={72} stroke="#98cbff" strokeWidth="0.4" opacity="0.2" />
 
-      {/* Roof / cabin */}
       <rect x={55} y={140} width={110} height={120} rx={12} fill="#111c36" stroke="#2d3449" strokeWidth="1" />
       <rect x={72} y={155} width={76} height={48} rx={7} fill="#0b1326" stroke="#1e293b" strokeWidth="0.5" opacity="0.9" />
 
-      {/* Windshield base */}
       <path d="M 62 140 L 158 140 L 152 110 L 68 110 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
-      {/* ── Climate: clearly visible tint over windshield ── */}
       {climateOn && climateOpacity > 0 && (
         <path
           d="M 62 140 L 158 140 L 152 110 L 68 110 Z"
@@ -225,32 +216,25 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
 
       <line x1={75} y1={114} x2={149} y2={114} stroke="white" strokeWidth="0.5" opacity="0.08" />
 
-      {/* Rear window */}
       <path d="M 62 260 L 158 260 L 152 290 L 68 290 Z" fill="#003354" fillOpacity="0.5" stroke="#98cbff" strokeWidth="0.5" opacity="0.7" />
 
-      {/* Door seams base */}
       <line x1={32} y1={175} x2={32} y2={225} stroke="#2d3449" strokeWidth="0.8" />
       <line x1={188} y1={175} x2={188} y2={225} stroke="#2d3449" strokeWidth="0.8" />
       <line x1={37} y1={200} x2={183} y2={200} stroke="#1e293b" strokeWidth="0.6" />
 
-      {/* ── Lock: yellow highlight on both door panels ── */}
       {isLocked && (
         <>
-          {/* Left door highlight */}
           <rect x={31} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
-          {/* Right door highlight */}
           <rect x={181} y={148} width={8} height={80} rx={3} fill="#fbbf24" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.8" className="lockPulse" filter="url(#softGlow)" />
         </>
       )}
 
-      {/* Tail lights */}
       <ellipse cx={68} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <ellipse cx={152} cy={330} rx={28} ry={12} fill="url(#tlGlow)" />
       <rect x={48} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <rect x={144} y={325} width={28} height={10} rx={3} fill="#ef4444" opacity="0.9" filter="url(#lightGlow)" />
       <line x1={76} y1={330} x2={144} y2={330} stroke="#ef4444" strokeWidth="0.4" opacity="0.2" />
 
-      {/* Trunk glow when frunk open */}
       {frunkOpen && (
         <>
           <ellipse cx={110} cy={348} rx={40} ry={10} fill="url(#frunkGlowRad)" />
@@ -258,7 +242,6 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
         </>
       )}
 
-      {/* Mode badges */}
       {isCampMode && (
         <>
           <circle cx={110} cy={200} r={95} fill="none" stroke="#4edea3" strokeWidth="0.6" opacity="0.3" className="campPulse" />
@@ -304,6 +287,7 @@ export default function Dashboard() {
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
+  const listeningRef = useRef(false);
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
@@ -329,30 +313,66 @@ export default function Dashboard() {
     const w = window as WindowWithSpeech;
     const SpeechRecognitionImpl = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRecognitionImpl) return;
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
+
+    // Stop if already listening
+    if (listeningRef.current && recognitionRef.current) {
+      listeningRef.current = false;
       setListening(false);
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
       return;
     }
+
+    // Start listening
     const recognition = new SpeechRecognitionImpl();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
+
     recognition.onresult = (event: SpeechRecognitionEventAPI) => {
-      const text = event.results[0][0].transcript;
-      setTranscript(text);
-      sendVoiceCommand(text)
-        .then((res) => {
-          if (res.message) setAgentMessage(res.message);
-          if (res.execution_time_seconds != null) setLastExecutionTime(res.execution_time_seconds);
-        })
-        .catch(() => { });
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          const text = event.results[i][0].transcript;
+          setTranscript(text);
+          sendVoiceCommand(text)
+            .then((res) => {
+              if (res.message) setAgentMessage(res.message);
+              if (res.execution_time_seconds != null) setLastExecutionTime(res.execution_time_seconds);
+            })
+            .catch(() => { });
+        }
+      }
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+
+    recognition.onend = () => {
+      // Restart automatically if still in listening mode
+      if (listeningRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch { }
+      }
+    };
+
+    recognition.onerror = (event: { error: string }) => {
+      if (event.error === "no-speech") {
+        // Restart on silence — don't stop
+        if (listeningRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch { }
+        }
+      } else {
+        // Fatal error — stop
+        listeningRef.current = false;
+        setListening(false);
+        recognitionRef.current = null;
+      }
+    };
+
     recognitionRef.current = recognition;
-    recognition.start();
+    listeningRef.current = true;
     setListening(true);
+    recognition.start();
   };
 
   const isCloud = (vehicleState?.connectivity_mode ?? "cloud") === "cloud";
