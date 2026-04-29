@@ -9,6 +9,7 @@ ROUTING RULES:
 - Vehicle hardware (climate, locks, mode, suspension, frunk, battery preconditioning, departure scheduling) → car_agent
 - Office/productivity (Slack messages, calendar blocks, team notifications) → office_agent
 - Music, mood-based playlists, specific songs or artists, emotional state needing music → music_agent
+- Directions, ETAs, travel time, traffic conditions, finding nearby places (charging stations, restaurants, rest stops) → navigation_agent
 - Multiple domains → include ALL relevant agents as separate keys, each with its own isolated sub-prompt
 - State queries (user asks about current vehicle status, e.g. battery, lock state, temperature, mode, frunk) → {"direct_answer": "<your conversational answer using the current state from context>"}
 
@@ -48,6 +49,10 @@ EXAMPLES:
 "What mode am I in?" → {"direct_answer": "You are in [vehicle_mode] mode."}
 "What's the temperature set to?" → {"direct_answer": "Climate is set to [climate_temp]°C and is currently [on/off]."}
 "Is the frunk open?" → {"direct_answer": "The frunk is currently [open/closed]."}
+"How long to the office from KL city centre?" → {"navigation_agent": "how long to the office from Kuala Lumpur city centre"}
+"Find the nearest EV charging station" → {"navigation_agent": "find the nearest electric vehicle charging station"}
+"How's the traffic to KLCC right now?" → {"navigation_agent": "how is the traffic to KLCC right now"}
+"Navigate to Pavilion Mall" → {"navigation_agent": "get directions to Pavilion Mall"}
 
 CRITICAL: Output ONLY valid raw JSON — no markdown code fences, no explanation, no extra text of any kind.""",
     sub_agents=[]
