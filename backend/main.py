@@ -29,6 +29,7 @@ from agents.supervisor_agent.agent import supervisor_agent
 from agents.car_agent.agent import car_agent
 from agents.office_agent.agent import office_agent
 from agents.music_agent.agent import music_agent
+from agents.navigation_agent.agent import navigation_agent
 
 app = FastAPI(title="AAOS AI Copilot Backend")
 
@@ -62,20 +63,24 @@ supervisor_runner = Runner(agent=supervisor_agent, app_name="vehicle_copilot", s
 car_session_service = InMemorySessionService()
 office_session_service = InMemorySessionService()
 music_session_service = InMemorySessionService()
+navigation_session_service = InMemorySessionService()
 
 car_runner = Runner(agent=car_agent, app_name="vehicle_copilot", session_service=car_session_service)
 office_runner = Runner(agent=office_agent, app_name="vehicle_copilot", session_service=office_session_service)
 music_runner = Runner(agent=music_agent, app_name="vehicle_copilot", session_service=music_session_service)
+navigation_runner = Runner(agent=navigation_agent, app_name="vehicle_copilot", session_service=navigation_session_service)
 
 AGENT_RUNNERS: Dict[str, Runner] = {
     "car_agent": car_runner,
     "office_agent": office_runner,
     "music_agent": music_runner,
+    "navigation_agent": navigation_runner,
 }
 AGENT_SESSION_SERVICES: Dict[str, InMemorySessionService] = {
     "car_agent": car_session_service,
     "office_agent": office_session_service,
     "music_agent": music_session_service,
+    "navigation_agent": navigation_session_service,
 }
 
 # Driver profile injected into every agent context
@@ -230,6 +235,15 @@ AGENT_REGISTRY = {
         "model": "gemini-2.5-flash",
         "type": "specialist",
         "tools": ["play_music_for_mood", "play_specific_track"]
+    },
+    "navigation_agent": {
+        "name": "Navigation Agent",
+        "icon": "navigation",
+        "description": "Directions, ETAs, live traffic, and nearby points of interest via Google Maps",
+        "status": "active",
+        "model": "gemini-2.0-flash",
+        "type": "specialist",
+        "tools": ["get_directions", "find_nearby", "get_traffic"]
     },
     "rental_agent": {
         "name": "Rental Agent",
@@ -403,7 +417,7 @@ def get_agent_registry():
     return {
         "hierarchy": {
             "root": "supervisor_agent",
-            "active_sub_agents": ["car_agent", "office_agent", "music_agent"],
+            "active_sub_agents": ["car_agent", "office_agent", "music_agent", "navigation_agent"],
             "planned_sub_agents": ["rental_agent", "truck_agent", "fleet_agent"]
         },
         "agents": AGENT_REGISTRY
