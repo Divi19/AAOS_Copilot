@@ -58,6 +58,144 @@ def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional
     destination_str = f" to {destination}" if destination else ""
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
 
+def get_directions(origin: str, destination: str) -> str:
+    """Returns driving directions with duration, distance, and estimated arrival time including live traffic."""
+    import googlemaps
+    from datetime import datetime, timedelta
+
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+    if not api_key:
+        return "Navigation service unavailable — GOOGLE_MAPS_API_KEY not configured"
+
+    print(f"🗺️ [NAV] Getting directions: {origin} → {destination}")
+
+    try:
+        gmaps = googlemaps.Client(key=api_key)
+        result = gmaps.directions(
+            origin,
+            destination,
+            mode="driving",
+            traffic_model="best_guess",
+            departure_time=datetime.now(),
+        )
+
+        if not result:
+            return f"No route found from {origin} to {destination}"
+
+        leg = result[0]["legs"][0]
+        duration_in_traffic = leg.get("duration_in_traffic", leg["duration"])
+        duration_text = duration_in_traffic["text"]
+        distance_text = leg["distance"]["text"]
+        summary = result[0].get("summary", "main route")
+
+        duration_secs = duration_in_traffic["value"]
+        arrival = datetime.now() + timedelta(seconds=duration_secs)
+        hour = arrival.hour % 12 or 12
+        arrival_str = f"{hour}:{arrival.strftime('%M')} {'AM' if arrival.hour < 12 else 'PM'}"
+
+        return f"It's {duration_text} to {destination} via {summary}. {distance_text} total. Estimated arrival at {arrival_str}."
+
+    except Exception as e:
+        return f"Navigation service unavailable: {str(e)}"
+
+
+def find_nearby(location: str, place_type: str) -> str:
+    """Finds the nearest places of a given type (e.g. electric_vehicle_charging_station) within 5km of location."""
+    import googlemaps
+
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+    if not api_key:
+        return "Navigation service unavailable — GOOGLE_MAPS_API_KEY not configured"
+
+    print(f"🗺️ [NAV] Finding nearby {place_type} near {location}")
+
+    try:
+        gmaps = googlemaps.Client(key=api_key)
+
+        # Accept "lat,lng" coordinates or geocode a place name
+        parts = location.split(",")
+        if len(parts) == 2:
+            try:
+                loc = (float(parts[0].strip()), float(parts[1].strip()))
+            except ValueError:
+                geo = gmaps.geocode(location)
+                if not geo:
+                    return f"Could not find location: {location}"
+                latlng = geo[0]["geometry"]["location"]
+                loc = (latlng["lat"], latlng["lng"])
+        else:
+            geo = gmaps.geocode(location)
+            if not geo:
+                return f"Could not find location: {location}"
+            latlng = geo[0]["geometry"]["location"]
+            loc = (latlng["lat"], latlng["lng"])
+
+        results = gmaps.places_nearby(location=loc, radius=5000, type=place_type)
+        places = results.get("results", [])
+
+        if not places:
+            return f"No {place_type.replace('_', ' ')} found within 5km."
+
+        lines = []
+        for i, place in enumerate(places[:3], 1):
+            name = place.get("name", "Unknown")
+            vicinity = place.get("vicinity", "")
+            rating = place.get("rating")
+            rating_str = f" ★{rating}" if rating else ""
+            lines.append(f"{i}. {name}{rating_str} — {vicinity}")
+
+        label = place_type.replace("_", " ")
+        return f"Nearest {label} within 5km:\n" + "\n".join(lines)
+
+    except Exception as e:
+        return f"Navigation service unavailable: {str(e)}"
+
+
+def get_traffic(origin: str, destination: str) -> str:
+    """Returns current traffic conditions and delay estimate between two locations."""
+    import googlemaps
+    from datetime import datetime
+
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+    if not api_key:
+        return "Navigation service unavailable — GOOGLE_MAPS_API_KEY not configured"
+
+    print(f"🗺️ [NAV] Checking traffic: {origin} → {destination}")
+
+    try:
+        gmaps = googlemaps.Client(key=api_key)
+        result = gmaps.distance_matrix(
+            origins=[origin],
+            destinations=[destination],
+            mode="driving",
+            traffic_model="best_guess",
+            departure_time=datetime.now(),
+        )
+
+        element = result["rows"][0]["elements"][0]
+        if element["status"] != "OK":
+            return f"Could not get traffic data from {origin} to {destination}"
+
+        distance_text = element["distance"]["text"]
+        normal_secs = element["duration"]["value"]
+        traffic_info = element.get("duration_in_traffic", element["duration"])
+        traffic_text = traffic_info["text"]
+        traffic_secs = traffic_info["value"]
+
+        delay_secs = traffic_secs - normal_secs
+        if delay_secs < 120:
+            status = "Traffic is flowing freely"
+        elif delay_secs < 600:
+            status = f"Moderate traffic — about {round(delay_secs / 60)} minutes longer than usual"
+        else:
+            status = f"Heavy traffic — about {round(delay_secs / 60)} minutes longer than usual"
+
+        return f"{status} on the way to {destination}. Current travel time is {traffic_text} ({distance_text})."
+
+    except Exception as e:
+        return f"Navigation service unavailable: {str(e)}"
+
+
 def send_slack_message(message: str) -> str:
     """Sends a Slack message to the team channel. Include context such as who is arriving and when."""
     try:
