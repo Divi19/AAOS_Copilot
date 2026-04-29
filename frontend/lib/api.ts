@@ -54,6 +54,7 @@ export async function sendVoiceCommand(transcript: string, callbacks: VoiceStrea
                 if (!line.startsWith("data: ")) continue;
                 try {
                     const event = JSON.parse(line.slice(6));
+                    if (event.type === "ping") continue;
                     switch (event.type) {
                         case "status":
                             callbacks.onStatus?.(event.message);
