@@ -97,6 +97,10 @@ class VoicePayload(BaseModel):
     transcript: Optional[str] = None
 
 
+class TTSPayload(BaseModel):
+    text: str
+
+
 async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict:
     """Run a single specialist agent with its targeted sub-prompt. Never raises — errors are caught and returned."""
     try:
@@ -429,6 +433,37 @@ async def get_job_status(job_id: str):
 @app.post("/vehicle/reset")
 def reset_vehicle_state():
     return reset_state().model_dump()
+
+
+@app.post("/tts")
+async def text_to_speech(payload: TTSPayload):
+    import base64
+    try:
+        from google.cloud import texttospeech
+        print(f"🔊 [TTS] Synthesizing: {payload.text[:50]}...")
+        client = texttospeech.TextToSpeechClient()
+        synthesis_input = texttospeech.SynthesisInput(text=payload.text)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Neural2-D",
+            ssml_gender=texttospeech.SsmlVoiceGender.MALE,
+        )
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+            speaking_rate=1.05,
+            pitch=0.0,
+        )
+        response = await asyncio.to_thread(
+            client.synthesize_speech,
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config,
+        )
+        audio_base64 = base64.b64encode(response.audio_content).decode("utf-8")
+        return {"audio_base64": audio_base64}
+    except Exception as e:
+        print(f"⚠️ [TTS] Failed: {e}")
+        return {"audio_base64": None}
 
 
 # ── Spotify Web Playback SDK endpoints ──────────────────────────────────────
