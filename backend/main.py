@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from models import VehicleState
 from state import get_state, reset_state
@@ -271,6 +272,104 @@ def get_agent_registry():
         "agents": AGENT_REGISTRY
     }
 
+async def _run_with_fallback(name: str, sub_prompt: str, start_time: float) -> dict:
+    """Wraps run_agent with a timeout so asyncio.as_completed never raises."""
+    try:
+        return await asyncio.wait_for(run_agent(name, sub_prompt, start_time), timeout=30)
+    except asyncio.TimeoutError:
+        return {"agent": name, "message": "Agent timed out", "tools_called": [], "agent_trace": []}
+
+
+async def event_stream(user_text: str, start_time: float):
+    """Async generator that yields SSE events as each agent completes."""
+
+    yield f"data: {json.dumps({'type': 'status', 'message': 'Processing...'})}\n\n"
+
+    # ── Step 1: Supervisor classification ──────────────────────────────────
+    context_str = (
+        f"Current State: {get_state().model_dump_json()}\n"
+        f"Driver Memory: {json.dumps(DRIVER_MEMORY)}\n"
+        f"User Request: {user_text}"
+    )
+
+    sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
+    sup_response = ""
+
+    async for event in supervisor_runner.run_async(
+        user_id="demo_user",
+        session_id=sup_session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
+    ):
+        if event.is_final_response():
+            sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
+
+    sup_response = sup_response.strip()
+    # Strip markdown code fences if the model wraps its output
+    if sup_response.startswith("```"):
+        lines = sup_response.splitlines()
+        sup_response = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
+
+    print(f"🧭 [SUPERVISOR] Classification: {sup_response}")
+
+    # ── Step 2: Parse classification ────────────────────────────────────────
+    agent_tasks: Dict[str, str] = {}
+    direct_answer: Optional[str] = None
+
+    try:
+        parsed = json.loads(sup_response)
+        if isinstance(parsed, dict):
+            agent_tasks = {k: v for k, v in parsed.items() if k in AGENT_RUNNERS and isinstance(v, str)}
+            if not agent_tasks and "direct_answer" in parsed:
+                direct_answer = str(parsed["direct_answer"])
+        elif isinstance(parsed, list):
+            agent_tasks = {n: user_text for n in parsed if n in AGENT_RUNNERS}
+    except (json.JSONDecodeError, ValueError):
+        if sup_response:
+            direct_answer = sup_response
+
+    # ── Step 3: Direct answers (state queries) ──────────────────────────────
+    if direct_answer is not None:
+        execution_time = round(time.time() - start_time, 2)
+        print(f"💬 [DIRECT ANSWER] ({execution_time}s): {direct_answer}")
+        yield f"data: {json.dumps({'type': 'final', 'intent': 'direct_answer', 'message': direct_answer, 'tools_called': [], 'agent_trace': [], 'execution_time_seconds': execution_time, 'actions': [], 'final_state': get_state().model_dump()})}\n\n"
+        return
+
+    if not agent_tasks:
+        print("⚠️ [SUPERVISOR] Empty or unrecognized classification — falling back to car_agent")
+        agent_tasks = {"car_agent": user_text}
+
+    # ── Step 4: Stream agent results as each one completes ──────────────────
+    yield f"data: {json.dumps({'type': 'status', 'message': 'Routing to agents...'})}\n\n"
+    print(f"🚀 [PARALLEL] Firing agents: {list(agent_tasks.keys())}")
+
+    all_tools_called: List[Dict[str, Any]] = []
+    all_agent_trace: List[Dict[str, Any]] = []
+    all_messages: List[str] = []
+
+    coros = [_run_with_fallback(name, sub_prompt, start_time) for name, sub_prompt in agent_tasks.items()]
+
+    for fut in asyncio.as_completed(coros):
+        try:
+            result = await fut
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'agent_error', 'agent': 'unknown', 'message': str(e)})}\n\n"
+            continue
+
+        all_tools_called.extend(result.get("tools_called", []))
+        all_agent_trace.extend(result.get("agent_trace", []))
+        msg = result.get("message", "").strip()
+        if msg:
+            all_messages.append(msg)
+        yield f"data: {json.dumps({'type': 'agent_result', 'agent': result['agent'], 'message': result['message'], 'tools_called': result['tools_called']})}\n\n"
+
+    # ── Step 5: Final merged event ───────────────────────────────────────────
+    combined_message = " ".join(all_messages)
+    execution_time = round(time.time() - start_time, 2)
+    print(f"⏱️ Total execution: {execution_time}s | Tools: {len(all_tools_called)}")
+
+    yield f"data: {json.dumps({'type': 'final', 'intent': 'multi_agent_execution', 'message': combined_message, 'tools_called': all_tools_called, 'agent_trace': all_agent_trace, 'execution_time_seconds': execution_time, 'actions': [{'action': t['tool'], 'value': 'executed'} for t in all_tools_called], 'final_state': get_state().model_dump()})}\n\n"
+
+
 @app.post("/vehicle/voice")
 async def execute_voice_command(voice: VoicePayload):
     start_time = time.time()
@@ -281,121 +380,11 @@ async def execute_voice_command(voice: VoicePayload):
 
     print(f"\n🎙️ [INCOMING VOICE PROMPT]: {user_text}")
 
-    # Supervisor gets the full context including raw user request for accurate classification
-    context_str = (
-        f"Current State: {get_state().model_dump_json()}\n"
-        f"Driver Memory: {json.dumps(DRIVER_MEMORY)}\n"
-        f"User Request: {user_text}"
+    return StreamingResponse(
+        event_stream(user_text, start_time),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-    try:
-        # ── Step 1: Supervisor classification + decomposition ─────────────────
-        sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
-        sup_response = ""
-
-        async for event in supervisor_runner.run_async(
-            user_id="demo_user",
-            session_id=sup_session.id,
-            new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
-        ):
-            if event.is_final_response():
-                sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
-
-        sup_response = sup_response.strip()
-        # Strip markdown code fences if the model wraps its output
-        if sup_response.startswith("```"):
-            lines = sup_response.splitlines()
-            sup_response = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
-
-        print(f"🧭 [SUPERVISOR] Classification: {sup_response}")
-
-        # ── Step 2: Parse classification ─────────────────────────────────────
-        # agent_tasks: {agent_name → sub_prompt}
-        agent_tasks: Dict[str, str] = {}
-        direct_answer: Optional[str] = None
-
-        try:
-            parsed = json.loads(sup_response)
-            if isinstance(parsed, dict):
-                # Extract valid agent sub-prompts (ignore unknown keys)
-                agent_tasks = {k: v for k, v in parsed.items() if k in AGENT_RUNNERS and isinstance(v, str)}
-                # direct_answer only applies when there are no agent tasks
-                if not agent_tasks and "direct_answer" in parsed:
-                    direct_answer = str(parsed["direct_answer"])
-            elif isinstance(parsed, list):
-                # Backward compat: plain list with no sub-prompts — use original user text
-                agent_tasks = {n: user_text for n in parsed if n in AGENT_RUNNERS}
-        except (json.JSONDecodeError, ValueError):
-            # Non-JSON → supervisor answered conversationally (state query)
-            if sup_response:
-                direct_answer = sup_response
-
-        # ── Step 3: Direct answers (state queries) ───────────────────────────
-        if direct_answer is not None:
-            execution_time = round(time.time() - start_time, 2)
-            print(f"💬 [DIRECT ANSWER] ({execution_time}s): {direct_answer}")
-            return {
-                "intent": "direct_answer",
-                "confidence": 1.0,
-                "message": direct_answer,
-                "tools_called": [],
-                "agent_trace": [],
-                "execution_time_seconds": execution_time,
-                "actions": [],
-                "final_state": get_state().model_dump()
-            }
-
-        # Fallback if supervisor returned empty or only unknown agents
-        if not agent_tasks:
-            print("⚠️ [SUPERVISOR] Empty or unrecognized classification — falling back to car_agent")
-            agent_tasks = {"car_agent": user_text}
-
-        # ── Step 4: Parallel agent execution ─────────────────────────────────
-        print(f"🚀 [PARALLEL] Firing agents: {list(agent_tasks.keys())}")
-
-        tasks = [
-            asyncio.wait_for(run_agent(name, sub_prompt, start_time), timeout=30)
-            for name, sub_prompt in agent_tasks.items()
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        parallel_time = round(time.time() - start_time, 2)
-        print(f"✅ [PARALLEL] All agents completed in {parallel_time}s")
-
-        # ── Step 5: Merge results ─────────────────────────────────────────────
-        all_tools_called: List[Dict[str, Any]] = []
-        all_agent_trace: List[Dict[str, Any]] = []
-        all_messages: List[str] = []
-
-        for result in results:
-            if isinstance(result, Exception):
-                print(f"❌ [PARALLEL] Agent raised exception: {result}")
-                continue
-            all_tools_called.extend(result.get("tools_called", []))
-            all_agent_trace.extend(result.get("agent_trace", []))
-            msg = result.get("message", "").strip()
-            if msg:
-                all_messages.append(msg)
-
-        combined_message = " ".join(all_messages)
-        execution_time = round(time.time() - start_time, 2)
-        print(f"⏱️ Total execution: {execution_time}s | Tools: {len(all_tools_called)}")
-
-        return {
-            "intent": "multi_agent_execution",
-            "confidence": 1.0,
-            "message": combined_message,
-            "tools_called": all_tools_called,
-            "agent_trace": all_agent_trace,
-            "execution_time_seconds": execution_time,
-            "actions": [{"action": t["tool"], "value": "executed"} for t in all_tools_called],
-            "final_state": get_state().model_dump()
-        }
-
-    except Exception as e:
-        execution_time = round(time.time() - start_time, 2)
-        print(f"ERROR ({execution_time}s): {str(e)}")
-        raise HTTPException(status_code=500, detail=f"AI Agent failed: {str(e)}")
 
 @app.post("/vehicle/reset")
 def reset_vehicle_state():
