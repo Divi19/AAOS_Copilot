@@ -167,3 +167,18 @@ export async function getAgentHierarchy(): Promise<AgentHierarchyData> {
     if (!res.ok) throw new Error(`Failed to fetch agent hierarchy: ${res.status}`);
     return res.json();
 }
+
+export async function synthesizeSpeech(text: string): Promise<string | null> {
+    try {
+        const res = await fetch(`${BASE_URL}/tts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return (data.audio_base64 as string) ?? null;
+    } catch {
+        return null;
+    }
+}

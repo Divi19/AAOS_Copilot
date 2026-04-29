@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks, getAgentHierarchy } from "../lib/api";
+import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks, getAgentHierarchy, synthesizeSpeech } from "../lib/api";
 import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
 import NowPlaying from "../components/NowPlaying";
 import AgentTree from "../components/AgentTree";
@@ -275,6 +275,27 @@ function CarVisualization({ state }: { state: VehicleState | null }) {
   );
 }
 
+// ─── TTS helper — wraps raw LINEAR16 PCM in a WAV container for decodeAudioData ──
+
+function pcmToWav(pcmBuffer: ArrayBuffer, sampleRate = 24000): ArrayBuffer {
+  const pcm = new Uint8Array(pcmBuffer);
+  const wav = new ArrayBuffer(44 + pcm.length);
+  const v = new DataView(wav);
+  const str = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + pcm.length, true);
+  str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true);            // PCM chunk size
+  v.setUint16(20, 1, true);             // PCM format
+  v.setUint16(22, 1, true);             // mono
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true); // byte rate
+  v.setUint16(32, 2, true);             // block align
+  v.setUint16(34, 16, true);            // bits per sample
+  str(36, "data"); v.setUint32(40, pcm.length, true);
+  new Uint8Array(wav).set(pcm, 44);
+  return wav;
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -290,6 +311,7 @@ export default function Dashboard() {
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [completedAgents, setCompletedAgents] = useState<string[]>([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
   const listeningRef = useRef(false);
   const cancelJobRef = useRef<(() => void) | null>(null);
@@ -298,6 +320,26 @@ export default function Dashboard() {
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
+  }, []);
+
+  const speakResponse = useCallback(async (text: string) => {
+    if (listeningRef.current) return;
+    const audioBase64 = await synthesizeSpeech(text);
+    if (!audioBase64) return;
+    try {
+      setIsSpeaking(true);
+      const pcm = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
+      const wav = pcmToWav(pcm.buffer);
+      const ctx = new AudioContext();
+      const audioBuffer = await ctx.decodeAudioData(wav);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => { setIsSpeaking(false); ctx.close(); };
+      source.start();
+    } catch {
+      setIsSpeaking(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -388,6 +430,8 @@ export default function Dashboard() {
               setActiveAgents([]);
               setProcessing(false);
               completedClearRef.current = setTimeout(() => setCompletedAgents([]), 3000);
+              const messageToSpeak = typeof res.message === "string" ? res.message : "";
+              if (messageToSpeak) speakResponse(messageToSpeak);
             },
             onError: (error) => {
               setAgentMessage(prev => prev ? `${prev}\nError: ${error}` : `Error: ${error}`);
@@ -494,6 +538,12 @@ export default function Dashboard() {
                 {audioStatus === "ready" ? "AAOS Audio Ready" : audioStatus === "error" ? "Audio Error" : "Connecting Audio"}
               </span>
             </div>
+            {isSpeaking && (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(19,27,46,0.8)", padding: "3px 10px", borderRadius: "4px", border: "1px solid rgba(65,71,84,0.25)" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#4edea3", animation: "agentPulse 1.2s ease-in-out infinite", fontVariationSettings: "'FILL' 1" }}>volume_up</span>
+                <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", color: "#c1c6d7", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>Speaking</span>
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {backendError && <span style={{ fontSize: "10px", color: "#6b7280" }}>Backend unreachable</span>}
