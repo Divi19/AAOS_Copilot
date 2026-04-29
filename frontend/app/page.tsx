@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks } from "../lib/api";
+import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks, getAgentHierarchy } from "../lib/api";
 import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
 import NowPlaying from "../components/NowPlaying";
 import AgentTree from "../components/AgentTree";
@@ -288,12 +288,22 @@ export default function Dashboard() {
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const [processing, setProcessing] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [activeAgents, setActiveAgents] = useState<string[]>([]);
+  const [completedAgents, setCompletedAgents] = useState<string[]>([]);
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
   const listeningRef = useRef(false);
   const cancelJobRef = useRef<(() => void) | null>(null);
+  const agentSubIdsRef = useRef<string[]>([]);
+  const completedClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
+  }, []);
+
+  useEffect(() => {
+    getAgentHierarchy()
+      .then(data => { agentSubIdsRef.current = data.hierarchy.active_sub_agents; })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -322,6 +332,8 @@ export default function Dashboard() {
       cancelJobRef.current();
       cancelJobRef.current = null;
       setProcessing(false);
+      setActiveAgents([]);
+      setCompletedAgents([]);
       return;
     }
 
@@ -347,10 +359,15 @@ export default function Dashboard() {
           setTranscript(text);
           setTranscriptExpanded(false);
           setAgentMessage("");
+          if (completedClearRef.current) clearTimeout(completedClearRef.current);
+          setActiveAgents(agentSubIdsRef.current);
+          setCompletedAgents([]);
           setProcessing(true);
 
           const callbacks: VoiceCallbacks = {
             onAgentResult: (agent, message) => {
+              setActiveAgents(prev => prev.filter(a => a !== agent));
+              setCompletedAgents(prev => prev.includes(agent) ? prev : [...prev, agent]);
               const label = agent
                 .replace("_agent", "")
                 .replace(/_/g, " ")
@@ -368,10 +385,14 @@ export default function Dashboard() {
               if (res.final_state) {
                 setVehicleState(res.final_state as VehicleState);
               }
+              setActiveAgents([]);
               setProcessing(false);
+              completedClearRef.current = setTimeout(() => setCompletedAgents([]), 3000);
             },
             onError: (error) => {
               setAgentMessage(prev => prev ? `${prev}\nError: ${error}` : `Error: ${error}`);
+              setActiveAgents([]);
+              setCompletedAgents([]);
               setProcessing(false);
             },
           };
@@ -593,7 +614,7 @@ export default function Dashboard() {
               <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>AGENT NETWORK</div>
               <div style={{ fontSize: "9px", letterSpacing: "0.1em", color: "#a0a8bc", textTransform: "uppercase", marginTop: "2px", fontFamily: "Space Grotesk, system-ui" }}>CLICK NODE TO EXPAND</div>
             </div>
-            <AgentTree />
+            <AgentTree activeAgents={activeAgents} completedAgents={completedAgents} processing={processing} />
           </aside>
         </div>
 
