@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getVehicleState, sendVoiceCommand, toggleConnectivity } from "../lib/api";
+import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks } from "../lib/api";
 import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
 import NowPlaying from "../components/NowPlaying";
 import AgentTree from "../components/AgentTree";
@@ -286,8 +286,10 @@ export default function Dashboard() {
   const [lastExecutionTime, setLastExecutionTime] = useState<number | null>(null);
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
+  const [processing, setProcessing] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
   const listeningRef = useRef(false);
+  const cancelJobRef = useRef<(() => void) | null>(null);
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
@@ -314,6 +316,14 @@ export default function Dashboard() {
     const SpeechRecognitionImpl = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRecognitionImpl) return;
 
+    // Cancel in-flight job if processing — keep listening so user can speak again
+    if (processing && cancelJobRef.current) {
+      cancelJobRef.current();
+      cancelJobRef.current = null;
+      setProcessing(false);
+      return;
+    }
+
     // Stop if already listening
     if (listeningRef.current && recognitionRef.current) {
       listeningRef.current = false;
@@ -334,12 +344,38 @@ export default function Dashboard() {
         if (event.results[i].isFinal) {
           const text = event.results[i][0].transcript;
           setTranscript(text);
-          sendVoiceCommand(text)
-            .then((res) => {
-              if (res.message) setAgentMessage(res.message);
-              if (res.execution_time_seconds != null) setLastExecutionTime(res.execution_time_seconds);
-            })
-            .catch(() => { });
+          setAgentMessage("");
+          setProcessing(true);
+
+          const callbacks: VoiceCallbacks = {
+            onAgentResult: (agent, message) => {
+              const label = agent
+                .replace("_agent", "")
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, c => c.toUpperCase());
+              setAgentMessage(prev => prev ? `${prev}\n[${label}] ${message}` : `[${label}] ${message}`);
+            },
+            onFinal: (finalResponse) => {
+              const res = finalResponse as Record<string, unknown>;
+              if (res.intent === "direct_answer" && typeof res.message === "string" && res.message) {
+                setAgentMessage(res.message);
+              }
+              if (typeof res.execution_time_seconds === "number") {
+                setLastExecutionTime(res.execution_time_seconds);
+              }
+              if (res.final_state) {
+                setVehicleState(res.final_state as VehicleState);
+              }
+              setProcessing(false);
+            },
+            onError: (error) => {
+              setAgentMessage(prev => prev ? `${prev}\nError: ${error}` : `Error: ${error}`);
+              setProcessing(false);
+            },
+          };
+
+          const cancel = sendVoiceCommand(text, callbacks);
+          cancelJobRef.current = cancel;
         }
       }
     };
@@ -382,7 +418,7 @@ export default function Dashboard() {
   const frunkColor = vehicleState?.frunk_open ? "#fbbf24" : "#8b90a0";
   const suspColor = getSuspColor(vehicleState?.suspension_level);
   const modeColor = getModeColor(vehicleState?.vehicle_mode);
-  const hasConversation = !!(transcript || agentMessage);
+  const hasConversation = !!(transcript || agentMessage || processing);
 
   const sideCard = (icon: string, label: string, value: string, subtext: string, color: string, isActive = false) => (
     <div style={{
@@ -487,11 +523,17 @@ export default function Dashboard() {
                     <span style={{ fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4 }}>&ldquo;{transcript}&rdquo;</span>
                   </div>
                 )}
+                {processing && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4edea3", flexShrink: 0, animation: "agentPulse 1.2s ease-in-out infinite" }} />
+                    <span style={{ fontSize: "11px", color: "#4edea3", fontFamily: "Space Grotesk, system-ui", fontWeight: 600, letterSpacing: "0.06em" }}>Agents working...</span>
+                  </div>
+                )}
                 {agentMessage && (
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
                     <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500 }}>{agentMessage}</span>
+                      <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500, whiteSpace: "pre-line" }}>{agentMessage}</span>
                       {lastExecutionTime != null && (
                         <span style={{ fontSize: "10px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.04em" }}>
                           Agent responded in {lastExecutionTime}s
@@ -521,8 +563,8 @@ export default function Dashboard() {
                   <span className="material-symbols-outlined" style={{ fontSize: "44px", color: listening ? "#98cbff" : "white", fontVariationSettings: "'FILL' 1", transition: "color 0.2s" }}>mic</span>
                 </button>
               </div>
-              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", color: listening ? "#98cbff" : "#a0a8bc", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui", transition: "color 0.3s" }}>
-                {listening ? "Listening..." : "Assistant Ready"}
+              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", color: processing ? "#4edea3" : listening ? "#98cbff" : "#a0a8bc", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui", transition: "color 0.3s" }}>
+                {processing ? "Processing..." : listening ? "Listening..." : "Assistant Ready"}
               </span>
             </div>
           </section>
@@ -543,6 +585,7 @@ export default function Dashboard() {
 
         <style>{`
           @keyframes ping { 0%{transform:scale(1);opacity:0.8;} 80%,100%{transform:scale(1.5);opacity:0;} }
+          @keyframes agentPulse { 0%,100%{opacity:0.35} 50%{opacity:1} }
           .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
         `}</style>
       </div>
