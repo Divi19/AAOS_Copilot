@@ -293,7 +293,7 @@ async def event_stream(user_text: str, start_time: float):
     )
 
     sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
-    sup_response = ""
+    supervisor_raw = ""
 
     async for event in supervisor_runner.run_async(
         user_id="demo_user",
@@ -301,9 +301,13 @@ async def event_stream(user_text: str, start_time: float):
         new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
     ):
         if event.is_final_response():
-            sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
+            for part in (event.content.parts or []):
+                if hasattr(part, 'text') and part.text:
+                    supervisor_raw += part.text
 
-    sup_response = sup_response.strip()
+    print(f"🧭 [SUPERVISOR RAW]: {repr(supervisor_raw)}")
+
+    sup_response = supervisor_raw.strip()
     # Strip markdown code fences if the model wraps its output
     if sup_response.startswith("```"):
         lines = sup_response.splitlines()
