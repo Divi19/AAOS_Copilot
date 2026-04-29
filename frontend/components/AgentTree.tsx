@@ -38,10 +38,14 @@ function AgentNode({
   info,
   isRoot = false,
   isComingSoon = false,
+  isRunning = false,
+  isDone = false,
 }: {
   info: AgentInfo;
   isRoot?: boolean;
   isComingSoon?: boolean;
+  isRunning?: boolean;
+  isDone?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isActive = info.status === "active";
@@ -53,6 +57,21 @@ function AgentNode({
     : "rgba(65,71,84,0.2)";
 
   return (
+    <div style={{ position: "relative", width: "100%" }}>
+      {(isRunning || isDone) && (
+        <div
+          style={{
+            position: "absolute",
+            inset: "-3px",
+            borderRadius: isRoot ? "15px" : "13px",
+            border: "2px solid #4edea3",
+            pointerEvents: "none",
+            opacity: isDone ? 0.6 : undefined,
+            animation: isRunning ? "agentRingPulse 1.5s ease-in-out infinite" : undefined,
+            transition: "opacity 0.3s ease",
+          }}
+        />
+      )}
     <div
       style={{
         background: isComingSoon
@@ -68,10 +87,12 @@ function AgentNode({
         alignItems: "center",
         gap: "4px",
         cursor: isComingSoon ? "default" : "pointer",
-        transition: "all 0.2s",
+        transition: "all 0.3s ease",
         opacity: isComingSoon ? 0.5 : 1,
         boxShadow:
-          expanded && isActive
+          isRunning
+            ? `0 0 14px rgba(78,222,163,0.2)`
+            : expanded && isActive
             ? `0 0 14px rgba(78,222,163,0.12)`
             : "none",
         userSelect: "none",
@@ -182,10 +203,21 @@ function AgentNode({
         </div>
       )}
     </div>
+    </div>
   );
 }
 
-export default function AgentTree() {
+interface AgentTreeProps {
+  activeAgents?: string[];
+  completedAgents?: string[];
+  processing?: boolean;
+}
+
+export default function AgentTree({
+  activeAgents = [],
+  completedAgents = [],
+  processing = false,
+}: AgentTreeProps) {
   const [data, setData] = useState<AgentHierarchyData | null>(null);
 
   useEffect(() => {
