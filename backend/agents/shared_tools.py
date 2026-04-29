@@ -4,6 +4,7 @@ from state import get_state
 import os
 import spotipy
 import spotify_state  # shared device ID + access token cache
+from typing import Optional
 
 def set_vehicle_mode(mode: str) -> str:
     """Sets the vehicle hardware mode (e.g. camp, dog, normal)."""
@@ -40,7 +41,7 @@ def schedule_departure(time: str) -> str:
     result = execute_action(Action(tool="scheduleDeparture", parameters={"time": time}), get_state())
     return result.message
 
-def prepare_for_trip(destination: str, departure_time: str = None) -> str:
+def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional[str] = None) -> str:
     """Prepares the vehicle for a trip: preconditions battery, sets climate to 22°C, and unlocks the vehicle.
     Optionally schedules a departure time. Call this when the user says they are heading somewhere,
     leaving, or about to depart — even if they don't list each action individually."""
