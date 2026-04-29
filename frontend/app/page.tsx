@@ -287,6 +287,7 @@ export default function Dashboard() {
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const [processing, setProcessing] = useState(false);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
   const listeningRef = useRef(false);
   const cancelJobRef = useRef<(() => void) | null>(null);
@@ -344,6 +345,7 @@ export default function Dashboard() {
         if (event.results[i].isFinal) {
           const text = event.results[i][0].transcript;
           setTranscript(text);
+          setTranscriptExpanded(false);
           setAgentMessage("");
           setProcessing(true);
 
@@ -516,11 +518,27 @@ export default function Dashboard() {
 
             {/* Conversation panel */}
             {hasConversation && (
-              <div style={{ position: "absolute", top: "56px", right: "56px", width: "280px", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
+              <div style={{ position: "absolute", top: "56px", right: "56px", width: "260px", maxWidth: "260px", maxHeight: "55vh", overflowY: "auto", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
                 {transcript && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0 }}>record_voice_over</span>
-                    <span style={{ fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4 }}>&ldquo;{transcript}&rdquo;</span>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0, marginTop: "1px" }}>record_voice_over</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0 }}>
+                      <span style={{
+                        fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4,
+                        ...(transcriptExpanded ? {} : {
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        } as React.CSSProperties),
+                      }}>&ldquo;{transcript}&rdquo;</span>
+                      <button
+                        onClick={() => setTranscriptExpanded(prev => !prev)}
+                        style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "11px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.03em" }}
+                      >
+                        {transcriptExpanded ? "Show less" : "Read more"}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {processing && (
