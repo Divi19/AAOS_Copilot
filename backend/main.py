@@ -361,6 +361,7 @@ async def event_stream(user_text: str, start_time: float):
         if msg:
             all_messages.append(msg)
         yield f"data: {json.dumps({'type': 'agent_result', 'agent': result['agent'], 'message': result['message'], 'tools_called': result['tools_called']})}\n\n"
+        yield "data: {\"type\": \"ping\"}\n\n"
 
     # ── Step 5: Final merged event ───────────────────────────────────────────
     combined_message = " ".join(all_messages)
@@ -383,7 +384,12 @@ async def execute_voice_command(voice: VoicePayload):
     return StreamingResponse(
         event_stream(user_text, start_time),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
+        },
     )
 
 @app.post("/vehicle/reset")
