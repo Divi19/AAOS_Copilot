@@ -2,6 +2,7 @@ from models import Action
 from executor import execute_action
 from state import get_state
 import os
+import requests
 import spotipy
 import spotify_state  # shared device ID + access token cache
 from typing import Optional
@@ -57,6 +58,97 @@ def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional
 
     destination_str = f" to {destination}" if destination else ""
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
+
+def get_weather_and_adjust(lat: float, lon: float) -> str:
+    """Fetches current weather at the given coordinates and proactively adjusts vehicle settings for comfort and safety."""
+    api_key = os.getenv("OPENWEATHERMAP_API_KEY")
+    if not api_key:
+        return "Weather service unavailable — OPENWEATHERMAP_API_KEY not configured"
+
+    print(f"🌤️ [WEATHER] Fetching conditions for {lat},{lon}")
+
+    try:
+        resp = requests.get(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={"lat": lat, "lon": lon, "appid": api_key, "units": "metric"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return "Weather service unavailable"
+
+    temp: float = data.get("main", {}).get("temp", 20.0)
+    humidity: int = data.get("main", {}).get("humidity", 50)
+    condition_id: int = data.get("weather", [{}])[0].get("id", 800)
+    condition_desc: str = data.get("weather", [{}])[0].get("description", "clear sky")
+    city: str = data.get("name", "your location")
+
+    # OpenWeatherMap condition IDs: 2xx=thunderstorm, 3xx=drizzle, 5xx=rain, 6xx=snow
+    is_rain = 200 <= condition_id < 600
+    is_snow = 600 <= condition_id < 700
+
+    adjustments: list[str] = []
+
+    if is_rain or is_snow:
+        set_suspension("high")
+        adjustments.append("raised suspension to high")
+
+    if temp > 30:
+        set_climate(on=True, temp=20.0)
+        adjustments.append("pre-cooled the cabin to 20°C")
+    elif temp < 10:
+        set_climate(on=True, temp=22.0)
+        precondition_battery(True)
+        adjustments.append("set climate to 22°C and started battery preconditioning")
+
+    if not adjustments:
+        return (
+            f"It's {round(temp)}°C and {condition_desc} in {city} with {humidity}% humidity. "
+            f"Conditions are comfortable — no vehicle adjustments needed."
+        )
+
+    if is_rain:
+        weather_part = f"Rain detected ({condition_desc})"
+    elif is_snow:
+        weather_part = f"Snow detected ({condition_desc})"
+    else:
+        weather_part = f"It's {round(temp)}°C and {condition_desc}"
+
+    actions = " and ".join(adjustments) if len(adjustments) <= 2 else ", ".join(adjustments[:-1]) + ", and " + adjustments[-1]
+    return f"{weather_part} in {city}. I've {actions} to keep you comfortable and safe."
+
+
+def get_weather_info(city: str) -> str:
+    """Returns a conversational weather summary for the given city without adjusting any vehicle settings."""
+    api_key = os.getenv("OPENWEATHERMAP_API_KEY")
+    if not api_key:
+        return "Weather service unavailable — OPENWEATHERMAP_API_KEY not configured"
+
+    print(f"🌤️ [WEATHER] Fetching info for city: {city}")
+
+    try:
+        resp = requests.get(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={"q": city, "appid": api_key, "units": "metric"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return "Weather service unavailable"
+
+    temp: float = data.get("main", {}).get("temp", 20.0)
+    feels_like: float = data.get("main", {}).get("feels_like", temp)
+    humidity: int = data.get("main", {}).get("humidity", 50)
+    condition_desc: str = data.get("weather", [{}])[0].get("description", "clear sky")
+    city_name: str = data.get("name", city)
+
+    return (
+        f"It's currently {round(temp)}°C in {city_name} with {condition_desc}. "
+        f"Feels like {round(feels_like)}°C and humidity is {humidity}%."
+    )
+
 
 def send_slack_message(message: str) -> str:
     """Sends a Slack message to the team channel. Include context such as who is arriving and when."""
