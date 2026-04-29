@@ -39,6 +39,14 @@ interface VehicleState {
   camp_mode?: boolean;
 }
 
+interface ConversationExchange {
+  id: string;
+  transcript: string;
+  agentMessage: string;
+  executionTime: number | null;
+  timestamp: Date;
+}
+
 function getModeColor(mode: string | undefined): string {
   switch (mode?.toLowerCase()) {
     case "camp": return "#4edea3";
@@ -302,13 +310,12 @@ export default function Dashboard() {
   const [vehicleState, setVehicleState] = useState<VehicleState | null>(null);
   const [backendError, setBackendError] = useState(false);
   const [listening, setListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [agentMessage, setAgentMessage] = useState("");
-  const [lastExecutionTime, setLastExecutionTime] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<ConversationExchange[]>([]);
+  const [currentExchange, setCurrentExchange] = useState<ConversationExchange | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const [processing, setProcessing] = useState(false);
-  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [completedAgents, setCompletedAgents] = useState<string[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -317,6 +324,7 @@ export default function Dashboard() {
   const cancelJobRef = useRef<(() => void) | null>(null);
   const agentSubIdsRef = useRef<string[]>([]);
   const completedClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentExchangeRef = useRef<ConversationExchange | null>(null);
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
@@ -398,13 +406,20 @@ export default function Dashboard() {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
           const text = event.results[i][0].transcript;
-          setTranscript(text);
-          setTranscriptExpanded(false);
-          setAgentMessage("");
           if (completedClearRef.current) clearTimeout(completedClearRef.current);
           setActiveAgents(agentSubIdsRef.current);
           setCompletedAgents([]);
           setProcessing(true);
+
+          const newExchange: ConversationExchange = {
+            id: crypto.randomUUID(),
+            transcript: text,
+            agentMessage: "",
+            executionTime: null,
+            timestamp: new Date(),
+          };
+          currentExchangeRef.current = newExchange;
+          setCurrentExchange(newExchange);
 
           const callbacks: VoiceCallbacks = {
             onAgentResult: (agent, message) => {
@@ -414,19 +429,37 @@ export default function Dashboard() {
                 .replace("_agent", "")
                 .replace(/_/g, " ")
                 .replace(/\b\w/g, c => c.toUpperCase());
-              setAgentMessage(prev => prev ? `${prev}\n[${label}] ${message}` : `[${label}] ${message}`);
+              if (currentExchangeRef.current) {
+                const updated: ConversationExchange = {
+                  ...currentExchangeRef.current,
+                  agentMessage: currentExchangeRef.current.agentMessage
+                    ? `${currentExchangeRef.current.agentMessage}\n[${label}] ${message}`
+                    : `[${label}] ${message}`,
+                };
+                currentExchangeRef.current = updated;
+                setCurrentExchange(updated);
+              }
             },
             onFinal: (finalResponse) => {
               const res = finalResponse as Record<string, unknown>;
+              let finalMessage = currentExchangeRef.current?.agentMessage ?? "";
               if (res.intent === "direct_answer" && typeof res.message === "string" && res.message) {
-                setAgentMessage(res.message);
+                finalMessage = res.message;
               }
-              if (typeof res.execution_time_seconds === "number") {
-                setLastExecutionTime(res.execution_time_seconds);
-              }
+              const execTime = typeof res.execution_time_seconds === "number" ? res.execution_time_seconds : null;
               if (res.final_state) {
                 setVehicleState(res.final_state as VehicleState);
               }
+              if (currentExchangeRef.current) {
+                const finalized: ConversationExchange = {
+                  ...currentExchangeRef.current,
+                  agentMessage: finalMessage,
+                  executionTime: execTime,
+                };
+                setConversations(prev => [finalized, ...prev].slice(0, 5));
+              }
+              currentExchangeRef.current = null;
+              setCurrentExchange(null);
               setActiveAgents([]);
               setProcessing(false);
               completedClearRef.current = setTimeout(() => setCompletedAgents([]), 3000);
@@ -434,7 +467,19 @@ export default function Dashboard() {
               if (messageToSpeak) speakResponse(messageToSpeak);
             },
             onError: (error) => {
-              setAgentMessage(prev => prev ? `${prev}\nError: ${error}` : `Error: ${error}`);
+              if (currentExchangeRef.current) {
+                const errMsg = currentExchangeRef.current.agentMessage
+                  ? `${currentExchangeRef.current.agentMessage}\nError: ${error}`
+                  : `Error: ${error}`;
+                const finalized: ConversationExchange = {
+                  ...currentExchangeRef.current,
+                  agentMessage: errMsg,
+                  executionTime: null,
+                };
+                setConversations(prev => [finalized, ...prev].slice(0, 5));
+                currentExchangeRef.current = null;
+                setCurrentExchange(null);
+              }
               setActiveAgents([]);
               setCompletedAgents([]);
               setProcessing(false);
@@ -485,7 +530,8 @@ export default function Dashboard() {
   const frunkColor = vehicleState?.frunk_open ? "#fbbf24" : "#8b90a0";
   const suspColor = getSuspColor(vehicleState?.suspension_level);
   const modeColor = getModeColor(vehicleState?.vehicle_mode);
-  const hasConversation = !!(transcript || agentMessage || processing);
+  const hasConversation = conversations.length > 0 || currentExchange !== null;
+  const isCurrentExpanded = currentExchange ? expandedIds.has(currentExchange.id) : false;
 
   const sideCard = (icon: string, label: string, value: string, subtext: string, color: string, isActive = false) => (
     <div style={{
@@ -587,50 +633,91 @@ export default function Dashboard() {
               <NowPlaying />
             </div>
 
-            {/* Conversation panel */}
+            {/* Conversation history panel */}
             {hasConversation && (
-              <div style={{ position: "absolute", top: "56px", right: "56px", width: "260px", maxWidth: "260px", maxHeight: "55vh", overflowY: "auto", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
-                {transcript && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0, marginTop: "1px" }}>record_voice_over</span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0 }}>
-                      <span style={{
-                        fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4,
-                        ...(transcriptExpanded ? {} : {
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        } as React.CSSProperties),
-                      }}>&ldquo;{transcript}&rdquo;</span>
-                      <button
-                        onClick={() => setTranscriptExpanded(prev => !prev)}
-                        style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "11px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.03em" }}
-                      >
-                        {transcriptExpanded ? "Show less" : "Read more"}
-                      </button>
+              <div style={{ position: "absolute", top: "56px", right: "56px", width: "260px", maxWidth: "260px", maxHeight: "55vh", overflowY: "auto", scrollBehavior: "smooth", background: "rgba(10,16,30,0.92)", border: "1px solid rgba(152,203,255,0.15)", borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", backdropFilter: "blur(16px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
+
+                {/* In-progress exchange */}
+                {currentExchange && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0, marginTop: "1px" }}>record_voice_over</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0 }}>
+                        <span style={{
+                          fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4,
+                          ...(isCurrentExpanded ? {} : {
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          } as React.CSSProperties),
+                        }}>&ldquo;{currentExchange.transcript}&rdquo;</span>
+                        <button
+                          onClick={() => setExpandedIds(prev => { const n = new Set(prev); n.has(currentExchange.id) ? n.delete(currentExchange.id) : n.add(currentExchange.id); return n; })}
+                          style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "11px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.03em" }}
+                        >{isCurrentExpanded ? "Show less" : "Read more"}</button>
+                      </div>
                     </div>
+                    {processing && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4edea3", flexShrink: 0, animation: "agentPulse 1.2s ease-in-out infinite" }} />
+                        <span style={{ fontSize: "11px", color: "#4edea3", fontFamily: "Space Grotesk, system-ui", fontWeight: 600, letterSpacing: "0.06em" }}>Agents working...</span>
+                      </div>
+                    )}
+                    {currentExchange.agentMessage && (
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
+                        <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500, whiteSpace: "pre-line" }}>{currentExchange.agentMessage}</span>
+                      </div>
+                    )}
                   </div>
                 )}
-                {processing && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4edea3", flexShrink: 0, animation: "agentPulse 1.2s ease-in-out infinite" }} />
-                    <span style={{ fontSize: "11px", color: "#4edea3", fontFamily: "Space Grotesk, system-ui", fontWeight: 600, letterSpacing: "0.06em" }}>Agents working...</span>
-                  </div>
-                )}
-                {agentMessage && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500, whiteSpace: "pre-line" }}>{agentMessage}</span>
-                      {lastExecutionTime != null && (
-                        <span style={{ fontSize: "10px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.04em" }}>
-                          Agent responded in {lastExecutionTime}s
-                        </span>
+
+                {/* Past exchanges */}
+                {conversations.map((exchange, index) => {
+                  const isFirst = index === 0 && !currentExchange;
+                  const isExpanded = expandedIds.has(exchange.id);
+                  return (
+                    <div key={exchange.id} style={{ opacity: isFirst ? 1 : 0.7 }}>
+                      {(currentExchange !== null || index > 0) && (
+                        <div style={{ height: "1px", background: "rgba(152,203,255,0.08)", margin: "10px 0" }} />
                       )}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#98cbff", flexShrink: 0, marginTop: "1px" }}>record_voice_over</span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0 }}>
+                            <span style={{
+                              fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4,
+                              ...(isExpanded ? {} : {
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              } as React.CSSProperties),
+                            }}>&ldquo;{exchange.transcript}&rdquo;</span>
+                            <button
+                              onClick={() => setExpandedIds(prev => { const n = new Set(prev); n.has(exchange.id) ? n.delete(exchange.id) : n.add(exchange.id); return n; })}
+                              style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "11px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.03em" }}
+                            >{isExpanded ? "Show less" : "Read more"}</button>
+                          </div>
+                        </div>
+                        {exchange.agentMessage && (
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <span style={{ fontSize: "13px", color: "#dae2fd", lineHeight: 1.5, fontFamily: "Space Grotesk, system-ui", fontWeight: 500, whiteSpace: "pre-line" }}>{exchange.agentMessage}</span>
+                              <span style={{ fontSize: "10px", color: "#8b90a0", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.04em" }}>
+                                {exchange.executionTime != null ? `${exchange.executionTime}s · ` : ""}
+                                {exchange.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
+
               </div>
             )}
 
