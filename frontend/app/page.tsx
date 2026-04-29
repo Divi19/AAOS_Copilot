@@ -285,6 +285,8 @@ export default function Dashboard() {
   const [agentMessage, setAgentMessage] = useState("");
   const [lastExecutionTime, setLastExecutionTime] = useState<number | null>(null);
   const [tunnelLoading, setTunnelLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [audioStatus, setAudioStatus] = useState<PlayerStatus>("connecting");
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
   const listeningRef = useRef(false);
@@ -334,12 +336,26 @@ export default function Dashboard() {
         if (event.results[i].isFinal) {
           const text = event.results[i][0].transcript;
           setTranscript(text);
-          sendVoiceCommand(text)
-            .then((res) => {
-              if (res.message) setAgentMessage(res.message);
-              if (res.execution_time_seconds != null) setLastExecutionTime(res.execution_time_seconds);
-            })
-            .catch(() => { });
+          setAgentMessage("");
+          setProcessing(true);
+          setStatusMessage("");
+          sendVoiceCommand(text, {
+            onStatus: (msg) => {
+              setStatusMessage(msg);
+            },
+            onAgentResult: (_agent, msg) => {
+              setProcessing(false);
+              setAgentMessage((prev) => prev ? prev + " " + msg : msg);
+            },
+            onFinal: (data) => {
+              setProcessing(false);
+              if (data.execution_time_seconds != null) setLastExecutionTime(data.execution_time_seconds);
+              if (data.final_state) setVehicleState(data.final_state as VehicleState);
+            },
+            onError: () => {
+              setProcessing(false);
+            },
+          }).catch(() => { setProcessing(false); });
         }
       }
     };
@@ -382,7 +398,7 @@ export default function Dashboard() {
   const frunkColor = vehicleState?.frunk_open ? "#fbbf24" : "#8b90a0";
   const suspColor = getSuspColor(vehicleState?.suspension_level);
   const modeColor = getModeColor(vehicleState?.vehicle_mode);
-  const hasConversation = !!(transcript || agentMessage);
+  const hasConversation = !!(transcript || agentMessage || processing);
 
   const sideCard = (icon: string, label: string, value: string, subtext: string, color: string, isActive = false) => (
     <div style={{
@@ -487,6 +503,12 @@ export default function Dashboard() {
                     <span style={{ fontSize: "12px", color: "#bcc7de", fontStyle: "italic", lineHeight: 1.4 }}>&ldquo;{transcript}&rdquo;</span>
                   </div>
                 )}
+                {processing && statusMessage && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#8b90a0", flexShrink: 0 }}>sync</span>
+                    <span style={{ fontSize: "11px", color: "#8b90a0", fontStyle: "italic", fontFamily: "Space Grotesk, system-ui", letterSpacing: "0.04em" }}>{statusMessage}</span>
+                  </div>
+                )}
                 {agentMessage && (
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#4edea3", flexShrink: 0, marginTop: "1px" }}>smart_toy</span>
@@ -521,8 +543,8 @@ export default function Dashboard() {
                   <span className="material-symbols-outlined" style={{ fontSize: "44px", color: listening ? "#98cbff" : "white", fontVariationSettings: "'FILL' 1", transition: "color 0.2s" }}>mic</span>
                 </button>
               </div>
-              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", color: listening ? "#98cbff" : "#a0a8bc", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui", transition: "color 0.3s" }}>
-                {listening ? "Listening..." : "Assistant Ready"}
+              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", color: listening ? (processing ? "#4edea3" : "#98cbff") : "#a0a8bc", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui", transition: "color 0.3s" }}>
+                {listening ? (processing ? "Processing..." : "Listening...") : "Assistant Ready"}
               </span>
             </div>
           </section>
