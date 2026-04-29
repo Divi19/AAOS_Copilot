@@ -19,11 +19,23 @@ export interface VoiceStreamCallbacks {
 }
 
 export async function sendVoiceCommand(transcript: string, callbacks: VoiceStreamCallbacks = {}): Promise<void> {
-    const res = await fetch(`${BASE_URL}/vehicle/voice`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    let res: Response;
+    try {
+        res = await fetch(`${BASE_URL}/vehicle/voice`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript }),
+            signal: controller.signal,
+        });
+    } catch (e) {
+        clearTimeout(timeout);
+        callbacks.onError?.(e instanceof Error ? e.message : "Fetch failed");
+        return;
+    }
+    clearTimeout(timeout);
 
     if (!res.ok) {
         callbacks.onError?.(`Request failed: ${res.status}`);
@@ -39,41 +51,45 @@ export async function sendVoiceCommand(transcript: string, callbacks: VoiceStrea
     const decoder = new TextDecoder();
     let buffer = "";
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
 
-        // Split on double-newline SSE event boundaries
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
+            // Split on double-newline SSE event boundaries
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() ?? "";
 
-        for (const part of parts) {
-            for (const line of part.split("\n")) {
-                if (!line.startsWith("data: ")) continue;
-                try {
-                    const event = JSON.parse(line.slice(6));
-                    if (event.type === "ping") continue;
-                    switch (event.type) {
-                        case "status":
-                            callbacks.onStatus?.(event.message);
-                            break;
-                        case "agent_result":
-                            callbacks.onAgentResult?.(event.agent, event.message, event.tools_called);
-                            break;
-                        case "agent_error":
-                            callbacks.onError?.(`${event.agent}: ${event.message}`);
-                            break;
-                        case "final":
-                            callbacks.onFinal?.(event);
-                            break;
+            for (const part of parts) {
+                for (const line of part.split("\n")) {
+                    if (!line.startsWith("data: ")) continue;
+                    try {
+                        const event = JSON.parse(line.slice(6));
+                        if (event.type === "ping") continue;
+                        switch (event.type) {
+                            case "status":
+                                callbacks.onStatus?.(event.message);
+                                break;
+                            case "agent_result":
+                                callbacks.onAgentResult?.(event.agent, event.message, event.tools_called);
+                                break;
+                            case "agent_error":
+                                callbacks.onError?.(`${event.agent}: ${event.message}`);
+                                break;
+                            case "final":
+                                callbacks.onFinal?.(event);
+                                break;
+                        }
+                    } catch {
+                        // Skip malformed JSON lines
                     }
-                } catch {
-                    // Skip malformed JSON lines
                 }
             }
         }
+    } finally {
+        reader.releaseLock();
     }
 }
 
