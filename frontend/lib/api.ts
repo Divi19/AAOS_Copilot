@@ -5,13 +5,75 @@ export async function getVehicleState() {
     return res.json();
 }
 
-export async function sendVoiceCommand(transcript: string) {
+export interface VoiceStreamCallbacks {
+    onStatus?: (message: string) => void;
+    onAgentResult?: (agent: string, message: string, tools_called: unknown[]) => void;
+    onFinal?: (data: {
+        message: string;
+        tools_called: unknown[];
+        agent_trace: unknown[];
+        execution_time_seconds: number;
+        final_state: unknown;
+    }) => void;
+    onError?: (error: string) => void;
+}
+
+export async function sendVoiceCommand(transcript: string, callbacks: VoiceStreamCallbacks = {}): Promise<void> {
     const res = await fetch(`${BASE_URL}/vehicle/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript }),
     });
-    return res.json();
+
+    if (!res.ok) {
+        callbacks.onError?.(`Request failed: ${res.status}`);
+        return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+        callbacks.onError?.("No response body");
+        return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double-newline SSE event boundaries
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+            for (const line of part.split("\n")) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                    const event = JSON.parse(line.slice(6));
+                    switch (event.type) {
+                        case "status":
+                            callbacks.onStatus?.(event.message);
+                            break;
+                        case "agent_result":
+                            callbacks.onAgentResult?.(event.agent, event.message, event.tools_called);
+                            break;
+                        case "agent_error":
+                            callbacks.onError?.(`${event.agent}: ${event.message}`);
+                            break;
+                        case "final":
+                            callbacks.onFinal?.(event);
+                            break;
+                    }
+                } catch {
+                    // Skip malformed JSON lines
+                }
+            }
+        }
+    }
 }
 
 export async function toggleConnectivity() {
