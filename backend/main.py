@@ -100,6 +100,7 @@ jobs: Dict[str, Any] = {}
 class VoicePayload(BaseModel):
     prompt: Optional[str] = None
     transcript: Optional[str] = None
+    conversation_history: Optional[list] = []
 
 
 class TTSPayload(BaseModel):
@@ -282,14 +283,22 @@ async def cleanup_job(job_id: str):
         print(f"🧹 [CLEANUP] Job {job_id} removed from memory")
 
 
-async def execute_agents_background(job_id: str, user_text: str, driver_memory: dict):
+async def execute_agents_background(job_id: str, user_text: str, driver_memory: dict, conversation_history: list = None):
     """Run supervisor + specialist agents in the background, updating jobs[job_id] as each agent completes."""
     start_time = time.time()
     try:
         # ── Step 1: Supervisor classification ─────────────────────────────────
+        history_str = ""
+        if conversation_history:
+            history_str = "\nRecent conversation:\n"
+            for exchange in conversation_history[-3:]:
+                history_str += f"User: {exchange.get('transcript', '')}\n"
+                history_str += f"Assistant: {exchange.get('agentMessage', '')}\n"
+
         context_str = (
             f"Current State: {get_state().model_dump_json()}\n"
-            f"Driver Memory: {json.dumps(driver_memory)}\n"
+            f"Driver Memory: {json.dumps(driver_memory)}"
+            f"{history_str}\n"
             f"User Request: {user_text}"
         )
         sup_session = supervisor_session_service.create_session(app_name="vehicle_copilot", user_id="demo_user")
@@ -426,6 +435,7 @@ def get_agent_registry():
 @app.post("/vehicle/voice")
 async def execute_voice_command(voice: VoicePayload):
     user_text = voice.prompt or voice.transcript or ""
+    conversation_history = voice.conversation_history or []
     if not user_text.strip():
         raise HTTPException(status_code=400, detail="No voice input provided. Send 'prompt' or 'transcript'.")
 
@@ -433,7 +443,7 @@ async def execute_voice_command(voice: VoicePayload):
 
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "starting", "results": [], "final": None}
-    asyncio.create_task(execute_agents_background(job_id, user_text, DRIVER_MEMORY))
+    asyncio.create_task(execute_agents_background(job_id, user_text, DRIVER_MEMORY, conversation_history))
 
     return {"job_id": job_id, "status": "starting"}
 
