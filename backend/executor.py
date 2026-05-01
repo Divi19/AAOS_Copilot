@@ -84,7 +84,36 @@ def execute_action(action: Action, state: VehicleState) -> ActionResult:
             level = params.get("level", "standard")
             state.suspension_level = level
             return ActionResult(success=True, message=f"Suspension set to {level.capitalize()}")
-            
+
+        elif tool == "setSeatHeating":
+            driver = params.get("driver", 0)
+            passenger = params.get("passenger", 0)
+            state.seat_heating_driver = driver
+            state.seat_heating_passenger = passenger
+            return ActionResult(success=True, message=f"Seat heating set — driver: level {driver}, passenger: level {passenger}")
+
+        elif tool == "setSeatVentilation":
+            driver = params.get("driver", 0)
+            passenger = params.get("passenger", 0)
+            state.seat_ventilation_driver = driver
+            state.seat_ventilation_passenger = passenger
+            return ActionResult(success=True, message=f"Seat ventilation set — driver: level {driver}, passenger: level {passenger}")
+
+        elif tool == "setAirPurification":
+            enabled = params.get("enabled", True)
+            state.air_purification_on = enabled
+            return ActionResult(success=True, message=f"Air purification {'enabled' if enabled else 'disabled'}")
+
+        elif tool == "setRecirculation":
+            enabled = params.get("enabled", True)
+            state.recirculation_on = enabled
+            return ActionResult(success=True, message=f"Air recirculation {'on — using cabin air' if enabled else 'off — using outside air'}")
+
+        elif tool == "setAQI":
+            aqi = params.get("aqi", None)
+            state.aqi = aqi
+            return ActionResult(success=True, message=f"AQI updated to {aqi}")
+
         else:
             return ActionResult(success=False, message=f"Unknown tool: {tool}")
             

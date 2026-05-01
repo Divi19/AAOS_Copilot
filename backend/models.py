@@ -14,6 +14,17 @@ class VehicleState(BaseModel):
     trunk_open: bool = False
     suspension_level: str = "standard"
 
+    # Micro-climate
+    seat_heating_driver: int = 0        # 0=off, 1=low, 2=medium, 3=high
+    seat_heating_passenger: int = 0     # 0=off, 1=low, 2=medium, 3=high
+    seat_ventilation_driver: int = 0    # 0=off, 1=low, 2=medium, 3=high
+    seat_ventilation_passenger: int = 0 # 0=off, 1=low, 2=medium, 3=high
+
+    # Air quality
+    air_purification_on: bool = False
+    recirculation_on: bool = False
+    aqi: Optional[int] = None          # Air Quality Index from OpenWeatherMap
+
 class Location(BaseModel):
     lat: float
     lng: float
