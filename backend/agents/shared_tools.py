@@ -59,7 +59,7 @@ def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional
     destination_str = f" to {destination}" if destination else ""
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
 
-def get_weather_and_adjust(city: str = None, lat: float = None, lon: float = None) -> str:
+def get_weather_and_adjust(city: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None) -> str:
     """Fetches current weather and proactively adjusts vehicle settings for comfort and safety.
     Accepts either a city name or lat/lon coordinates. If only a city name is provided, it will be geocoded automatically."""
     api_key = os.getenv("OPENWEATHERMAP_API_KEY")
