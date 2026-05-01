@@ -37,6 +37,13 @@ interface VehicleState {
   suspension_level: string;
   connectivity_mode?: string;
   camp_mode?: boolean;
+  seat_heating_driver: number;
+  seat_heating_passenger: number;
+  seat_ventilation_driver: number;
+  seat_ventilation_passenger: number;
+  air_purification_on: boolean;
+  recirculation_on: boolean;
+  aqi: number | null;
 }
 
 interface ConversationExchange {
@@ -609,7 +616,7 @@ export default function Dashboard() {
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
           {/* Left Sidebar */}
-          <aside style={{ width: "300px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderRight: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px 20px", gap: "10px" }}>
+          <aside style={{ width: "300px", flexShrink: 0, background: "rgba(19,27,46,0.6)", backdropFilter: "blur(20px)", borderRight: "1px solid rgba(65,71,84,0.15)", display: "flex", flexDirection: "column", padding: "20px 20px", gap: "10px", overflowY: "auto" }}>
             <div style={{ marginBottom: "4px", paddingLeft: "4px" }}>
               <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.2em", color: "#dae2fd", textTransform: "uppercase", fontFamily: "Space Grotesk, system-ui" }}>VEHICLE</div>
               <div style={{ fontSize: "9px", letterSpacing: "0.1em", color: "#a0a8bc", textTransform: "uppercase", marginTop: "2px", fontFamily: "Space Grotesk, system-ui" }}>SYSTEMS NOMINAL</div>
@@ -620,6 +627,10 @@ export default function Dashboard() {
             {sideCard("directions_car", "Frunk", vehicleState?.frunk_open ? "OPEN" : "CLOSED", "CARGO AREA", frunkColor, vehicleState?.frunk_open ?? false)}
             {sideCard("tune", "Suspension", vehicleState?.suspension_level ?? "—", `LEVEL: ${(vehicleState?.suspension_level ?? "standard").toUpperCase()}`, suspColor, vehicleState?.suspension_level === "high")}
             {sideCard("speed", "Mode", vehicleState?.vehicle_mode ?? "—", `${(vehicleState?.vehicle_mode ?? "normal").toUpperCase()} MODE`, modeColor, vehicleState?.vehicle_mode === "camp" || vehicleState?.vehicle_mode === "dog")}
+            {sideCard("airline_seat_recline_extra", "Seat Heat", (vehicleState?.seat_heating_driver ?? 0) > 0 ? `Driver L${vehicleState!.seat_heating_driver}` : "OFF", (vehicleState?.seat_heating_driver ?? 0) > 0 ? "ACTIVE" : "OFF", "#fbbf24", (vehicleState?.seat_heating_driver ?? 0) > 0)}
+            {sideCard("mode_fan", "Seat Vent", (vehicleState?.seat_ventilation_driver ?? 0) > 0 ? `Driver L${vehicleState!.seat_ventilation_driver}` : "OFF", (vehicleState?.seat_ventilation_driver ?? 0) > 0 ? "ACTIVE" : "OFF", "#98cbff", (vehicleState?.seat_ventilation_driver ?? 0) > 0)}
+            {sideCard("air_purifier_gen", "Air Quality", vehicleState?.aqi ? `AQI ${vehicleState.aqi}` : "—", vehicleState?.air_purification_on ? "PURIFYING" : "STANDARD", vehicleState?.air_purification_on ? "#4edea3" : "#8b90a0", vehicleState?.air_purification_on ?? false)}
+            {sideCard("sync_alt", "Air Flow", vehicleState?.recirculation_on ? "RECIRCULATING" : "OUTSIDE AIR", vehicleState?.recirculation_on ? "CABIN AIR" : "FRESH AIR", "#98cbff", vehicleState?.recirculation_on ?? false)}
           </aside>
 
           {/* Center Canvas */}
