@@ -486,7 +486,11 @@ export default function Dashboard() {
             },
           };
 
-          const cancel = sendVoiceCommand(text, callbacks);
+          const history = conversations.map(c => ({
+                            transcript: c.transcript,
+                            agentMessage: c.agentMessage,
+                          }));
+          const cancel = sendVoiceCommand(text, history, callbacks);
           cancelJobRef.current = cancel;
         }
       }

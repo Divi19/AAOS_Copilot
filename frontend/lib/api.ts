@@ -11,7 +11,7 @@ export interface VoiceCallbacks {
     onError: (error: string) => void;
 }
 
-export function sendVoiceCommand(transcript: string, callbacks: VoiceCallbacks): () => void {
+export function sendVoiceCommand(transcript: string, conversationHistory: Array<{ transcript: string; agentMessage: string }>, callbacks: VoiceCallbacks): () => void {
     let cancelled = false;
     let pollIntervalId: ReturnType<typeof setInterval> | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -26,7 +26,7 @@ export function sendVoiceCommand(transcript: string, callbacks: VoiceCallbacks):
     fetch(`${BASE_URL}/vehicle/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript, conversation_history: conversationHistory }),
     })
         .then(res => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
