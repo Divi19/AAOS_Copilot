@@ -59,6 +59,26 @@ def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional
     destination_str = f" to {destination}" if destination else ""
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
 
+def set_seat_heating(driver: int = 0, passenger: int = 0) -> str:
+    """Sets seat heating level for driver and passenger. Level 0=off, 1=low, 2=medium, 3=high."""
+    result = execute_action(Action(tool="setSeatHeating", parameters={"driver": driver, "passenger": passenger}), get_state())
+    return result.message
+
+def set_seat_ventilation(driver: int = 0, passenger: int = 0) -> str:
+    """Sets seat ventilation level for driver and passenger. Level 0=off, 1=low, 2=medium, 3=high."""
+    result = execute_action(Action(tool="setSeatVentilation", parameters={"driver": driver, "passenger": passenger}), get_state())
+    return result.message
+
+def set_air_purification(enabled: bool) -> str:
+    """Enables or disables the cabin air purification and ionization system."""
+    result = execute_action(Action(tool="setAirPurification", parameters={"enabled": enabled}), get_state())
+    return result.message
+
+def set_recirculation(enabled: bool) -> str:
+    """Toggles air recirculation — True uses cabin air, False pulls in outside air."""
+    result = execute_action(Action(tool="setRecirculation", parameters={"enabled": enabled}), get_state())
+    return result.message
+
 def get_weather_and_adjust(city: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None) -> str:
     """Fetches current weather and proactively adjusts vehicle settings for comfort and safety.
     Accepts either a city name or lat/lon coordinates. If only a city name is provided, it will be geocoded automatically."""
@@ -101,7 +121,24 @@ def get_weather_and_adjust(city: Optional[str] = None, lat: Optional[float] = No
     humidity: int = data.get("main", {}).get("humidity", 50)
     condition_id: int = data.get("weather", [{}])[0].get("id", 800)
     condition_desc: str = data.get("weather", [{}])[0].get("description", "clear sky")
-    city: str = data.get("name", "your location")
+    city_name: str = data.get("name", "your location")
+
+    # Fetch AQI from Air Pollution API
+    aqi_index = None
+    try:
+        aqi_resp = requests.get(
+            "https://api.openweathermap.org/data/2.5/air_pollution",
+            params={"lat": lat, "lon": lon, "appid": api_key},
+            timeout=5,
+        )
+        aqi_resp.raise_for_status()
+        aqi_data = aqi_resp.json()
+        aqi_index = aqi_data.get("list", [{}])[0].get("main", {}).get("aqi", None)
+        # AQI: 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=Very Poor
+        if aqi_index:
+            execute_action(Action(tool="setAQI", parameters={"aqi": aqi_index}), get_state())
+    except Exception:
+        pass
 
     # OpenWeatherMap condition IDs: 2xx=thunderstorm, 3xx=drizzle, 5xx=rain, 6xx=snow
     is_rain = 200 <= condition_id < 600
@@ -123,14 +160,34 @@ def get_weather_and_adjust(city: Optional[str] = None, lat: Optional[float] = No
         precondition_battery(True)
         adjustments.append("set climate to 22°C and started battery preconditioning")
 
-    # Humidity above 80% → climate on for dehumidification (if not already set)
-    if humidity > 80 and temp <= 26:
-        set_climate(on=True, temp=22.0)
-        adjustments.append("turned on climate to manage high humidity")
+    # Temperature above 30°C → seat ventilation for comfort
+    if temp > 30:
+        set_seat_ventilation(driver=2, passenger=1)
+        adjustments.append("enabled seat ventilation")
+
+    # Temperature below 15°C → seat heating for comfort
+    if temp < 15:
+        set_seat_heating(driver=2, passenger=1)
+        adjustments.append("enabled seat heating")
+
+    # Poor air quality (AQI ≥ 3: Moderate or worse) → purify and recirculate
+    if aqi_index and aqi_index >= 3:
+        set_air_purification(True)
+        set_recirculation(True)
+        adjustments.append("enabled air purification and recirculation due to poor air quality")
+
+    # Humidity above 80% → disable recirculation to pull in outside air and prevent fogging
+    if humidity > 80:
+        set_recirculation(False)
+        if temp <= 26:
+            set_climate(on=True, temp=22.0)
+            adjustments.append("turned on climate and disabled recirculation to reduce cabin humidity and prevent window fogging")
+        else:
+            adjustments.append("disabled recirculation to reduce cabin humidity and prevent window fogging")
 
     if not adjustments:
         return (
-            f"It's {round(temp)}°C and {condition_desc} in {city} with {humidity}% humidity. "
+            f"It's {round(temp)}°C and {condition_desc} in {city_name} with {humidity}% humidity. "
             f"Conditions are comfortable — no vehicle adjustments needed."
         )
 
@@ -138,13 +195,11 @@ def get_weather_and_adjust(city: Optional[str] = None, lat: Optional[float] = No
         weather_part = f"Rain detected ({condition_desc})"
     elif is_snow:
         weather_part = f"Snow detected ({condition_desc})"
-    elif temp > 26:
-        weather_part = f"It's {round(temp)}°C and {condition_desc}"
     else:
         weather_part = f"It's {round(temp)}°C and {condition_desc}"
 
     actions = " and ".join(adjustments) if len(adjustments) <= 2 else ", ".join(adjustments[:-1]) + ", and " + adjustments[-1]
-    return f"{weather_part} in {city} with {humidity}% humidity. I've {actions} to keep you comfortable and safe."
+    return f"{weather_part} in {city_name} with {humidity}% humidity. I've {actions} to keep you comfortable and safe."
 
 
 def get_weather_info(city: str) -> str:
