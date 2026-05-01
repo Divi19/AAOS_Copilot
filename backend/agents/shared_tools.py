@@ -59,14 +59,33 @@ def prepare_for_trip(destination: Optional[str] = None, departure_time: Optional
     destination_str = f" to {destination}" if destination else ""
     return f"Trip{destination_str} prepared: {', '.join(summary_parts)}"
 
-def get_weather_and_adjust(lat: float, lon: float) -> str:
-    """Fetches current weather at the given coordinates and proactively adjusts vehicle settings for comfort and safety."""
+def get_weather_and_adjust(city: str = None, lat: float = None, lon: float = None) -> str:
+    """Fetches current weather and proactively adjusts vehicle settings for comfort and safety.
+    Accepts either a city name or lat/lon coordinates. If only a city name is provided, it will be geocoded automatically."""
     api_key = os.getenv("OPENWEATHERMAP_API_KEY")
     if not api_key:
         return "Weather service unavailable — OPENWEATHERMAP_API_KEY not configured"
 
-    print(f"🌤️ [WEATHER] Fetching conditions for {lat},{lon}")
+    if (lat is None or lon is None) and city:
+        print(f"🌤️ [WEATHER] Geocoding city: {city}")
+        try:
+            geo_resp = requests.get(
+                "https://api.openweathermap.org/geo/1.0/direct",
+                params={"q": city, "limit": 1, "appid": api_key},
+                timeout=5,
+            )
+            geo_resp.raise_for_status()
+            coords = geo_resp.json()
+            if not coords:
+                return f"Could not find coordinates for '{city}'"
+            lat, lon = coords[0]["lat"], coords[0]["lon"]
+        except Exception:
+            return "Weather service unavailable"
 
+    if lat is None or lon is None:
+        return "Location not specified — please provide a city name or coordinates"
+
+    print(f"🌤️ [WEATHER] Fetching conditions for {lat},{lon}")
     try:
         resp = requests.get(
             "https://api.openweathermap.org/data/2.5/weather",
@@ -90,17 +109,24 @@ def get_weather_and_adjust(lat: float, lon: float) -> str:
 
     adjustments: list[str] = []
 
+    # Rain or snow → raise suspension for safety
     if is_rain or is_snow:
         set_suspension("high")
-        adjustments.append("raised suspension to high")
+        adjustments.append("raised suspension to high for wet roads")
 
-    if temp > 30:
+    # Temperature above 26°C → pre-cool cabin (covers KL climate)
+    if temp > 26:
         set_climate(on=True, temp=20.0)
         adjustments.append("pre-cooled the cabin to 20°C")
     elif temp < 10:
         set_climate(on=True, temp=22.0)
         precondition_battery(True)
         adjustments.append("set climate to 22°C and started battery preconditioning")
+
+    # Humidity above 80% → climate on for dehumidification (if not already set)
+    if humidity > 80 and temp <= 26:
+        set_climate(on=True, temp=22.0)
+        adjustments.append("turned on climate to manage high humidity")
 
     if not adjustments:
         return (
@@ -112,11 +138,13 @@ def get_weather_and_adjust(lat: float, lon: float) -> str:
         weather_part = f"Rain detected ({condition_desc})"
     elif is_snow:
         weather_part = f"Snow detected ({condition_desc})"
+    elif temp > 26:
+        weather_part = f"It's {round(temp)}°C and {condition_desc}"
     else:
         weather_part = f"It's {round(temp)}°C and {condition_desc}"
 
     actions = " and ".join(adjustments) if len(adjustments) <= 2 else ", ".join(adjustments[:-1]) + ", and " + adjustments[-1]
-    return f"{weather_part} in {city}. I've {actions} to keep you comfortable and safe."
+    return f"{weather_part} in {city} with {humidity}% humidity. I've {actions} to keep you comfortable and safe."
 
 
 def get_weather_info(city: str) -> str:
