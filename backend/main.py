@@ -108,6 +108,13 @@ class TTSPayload(BaseModel):
     text: str
 
 
+def _response_text(event) -> str:
+    """Join all text parts of a model response — Gemini 3 can split text across parts."""
+    if not event.content or not event.content.parts:
+        return ""
+    return "".join(p.text for p in event.content.parts if getattr(p, "text", None))
+
+
 async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict:
     """Run a single specialist agent with its targeted sub-prompt. Never raises — errors are caught and returned."""
     try:
@@ -182,7 +189,7 @@ async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict
                     })
 
             if event.is_final_response():
-                final_text = event.content.parts[0].text if event.content and event.content.parts else ""
+                final_text = _response_text(event)
                 print(f"✔ [{agent_name}] Final: {final_text[:120]}")
 
         return {
@@ -310,7 +317,7 @@ async def execute_agents_background(job_id: str, user_text: str, driver_memory: 
             new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
         ):
             if event.is_final_response():
-                sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
+                sup_response = _response_text(event)
 
         sup_response = sup_response.strip()
         if sup_response.startswith("```"):
