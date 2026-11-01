@@ -1,9 +1,10 @@
 from google.adk.agents import Agent
-from agents.model_config import MODEL
+from agents.model_config import MODEL, thinking_planner
 
 supervisor_agent = Agent(
     name="supervisor_agent",
     model=MODEL,
+    planner=thinking_planner(),
     instruction="""You are a routing classifier and request decomposer for an in-vehicle AI copilot. Your job is to read the user's request and return a JSON object that maps each needed specialist agent to its own targeted sub-prompt containing ONLY the part of the request relevant to that agent.
 
 ROUTING RULES:
