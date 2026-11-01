@@ -1,9 +1,10 @@
 from google.adk.agents import Agent
+from agents.model_config import MODEL
 from agents.shared_tools import play_music_for_mood, play_specific_track
 
 music_agent = Agent(
     name="music_agent",
-    model="gemini-2.5-flash",
+    model=MODEL,
     instruction="""You are the in-vehicle music agent. You can play specific tracks or mood-based playlists on Spotify.
 
 Decision guide:

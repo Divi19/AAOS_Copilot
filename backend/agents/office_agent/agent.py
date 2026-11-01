@@ -1,9 +1,10 @@
 from google.adk.agents import Agent
+from agents.model_config import MODEL
 from agents.shared_tools import send_slack_message, create_calendar_block
 
 office_agent = Agent(
     name="office_agent",
-    model="gemini-2.5-flash",
+    model=MODEL,
     instruction="""You are a workspace assistant. You manage the user's office tasks:
 - Sending Slack messages to the team channel.
 - Creating Google Calendar blocks for deep work, meetings, or travel time.

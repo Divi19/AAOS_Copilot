@@ -18,7 +18,7 @@ import spotify_state
 # CRITICAL: Load .env BEFORE importing ADK agents — they read env vars at import time
 load_dotenv()
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "aaos-vehicle-system")
-os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
+os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
 
 import vertexai
@@ -30,6 +30,7 @@ from agents.car_agent.agent import car_agent
 from agents.office_agent.agent import office_agent
 from agents.music_agent.agent import music_agent
 from agents.weather_agent.agent import weather_agent
+from agents.model_config import MODEL
 
 app = FastAPI(title="AAOS AI Copilot Backend")
 
@@ -107,6 +108,13 @@ class TTSPayload(BaseModel):
     text: str
 
 
+def _response_text(event) -> str:
+    """Join all text parts of a model response — Gemini 3 can split text across parts."""
+    if not event.content or not event.content.parts:
+        return ""
+    return "".join(p.text for p in event.content.parts if getattr(p, "text", None))
+
+
 async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict:
     """Run a single specialist agent with its targeted sub-prompt. Never raises — errors are caught and returned."""
     try:
@@ -181,7 +189,7 @@ async def run_agent(agent_name: str, sub_prompt: str, start_time: float) -> dict
                     })
 
             if event.is_final_response():
-                final_text = event.content.parts[0].text if event.content and event.content.parts else ""
+                final_text = _response_text(event)
                 print(f"✔ [{agent_name}] Final: {final_text[:120]}")
 
         return {
@@ -207,7 +215,7 @@ AGENT_REGISTRY = {
         "icon": "hub",
         "description": "Routes intents to specialized sub-agents",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "router"
     },
     "car_agent": {
@@ -215,7 +223,7 @@ AGENT_REGISTRY = {
         "icon": "directions_car",
         "description": "Controls vehicle hardware: climate, locks, suspension, modes",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["set_climate", "lock_vehicle", "set_vehicle_mode", "control_frunk", "set_suspension"]
     },
@@ -224,7 +232,7 @@ AGENT_REGISTRY = {
         "icon": "business_center",
         "description": "Manages workspace: Slack messages, calendar blocks",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["send_slack_message", "create_calendar_block"]
     },
@@ -233,7 +241,7 @@ AGENT_REGISTRY = {
         "icon": "music_note",
         "description": "Controls mood-based and specific music playback via Spotify",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["play_music_for_mood", "play_specific_track"]
     },
@@ -242,7 +250,7 @@ AGENT_REGISTRY = {
         "icon": "partly_cloudy_day",
         "description": "Fetches live weather and proactively adjusts vehicle settings for comfort and safety",
         "status": "active",
-        "model": "gemini-2.0-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["get_weather_and_adjust", "get_weather_info"]
     },
@@ -251,7 +259,7 @@ AGENT_REGISTRY = {
         "icon": "car_rental",
         "description": "Manages fleet check-in/out, damage reports, customer handoff",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["check_in_vehicle", "generate_damage_report", "handoff_to_customer"]
     },
@@ -260,7 +268,7 @@ AGENT_REGISTRY = {
         "icon": "local_shipping",
         "description": "Assists drivers with HOS compliance, route optimization, load management",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["check_hos_status", "optimize_route", "log_cargo_weight"]
     },
@@ -269,7 +277,7 @@ AGENT_REGISTRY = {
         "icon": "fleet_management",
         "description": "OEM-level fleet telemetry, predictive maintenance, recall management",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["get_fleet_health", "schedule_maintenance", "issue_recall"]
     }
@@ -309,7 +317,7 @@ async def execute_agents_background(job_id: str, user_text: str, driver_memory: 
             new_message=types.Content(role="user", parts=[types.Part(text=context_str)])
         ):
             if event.is_final_response():
-                sup_response = event.content.parts[0].text if event.content and event.content.parts else ""
+                sup_response = _response_text(event)
 
         sup_response = sup_response.strip()
         if sup_response.startswith("```"):
