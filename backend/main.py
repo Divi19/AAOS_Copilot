@@ -25,6 +25,7 @@ import vertexai
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
+import adk_patches  # noqa: F401 — fixes ADK 0.1.0 tracing crash with Gemini 3
 from agents.supervisor_agent.agent import supervisor_agent
 from agents.car_agent.agent import car_agent
 from agents.office_agent.agent import office_agent
