@@ -50,3 +50,6 @@ env.yaml
 
 # build cache
 .cache/
+# python bytecode
+__pycache__/
+*.pyc
