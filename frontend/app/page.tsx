@@ -311,6 +311,11 @@ function pcmToWav(pcmBuffer: ArrayBuffer, sampleRate = 24000): ArrayBuffer {
   return wav;
 }
 
+// ─── Voice capture tuning ─────────────────────────────────────────────────────
+
+const SILENCE_MS = 2000;   // send the command after this long with no new speech
+const NO_SPEECH_MS = 10000; // stop listening if nothing is heard at all
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -332,6 +337,11 @@ export default function Dashboard() {
   const agentSubIdsRef = useRef<string[]>([]);
   const completedClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentExchangeRef = useRef<ConversationExchange | null>(null);
+  // Speech heard so far: committedText survives browser-initiated restarts, sessionText is the live session
+  const committedTextRef = useRef("");
+  const sessionTextRef = useRef("");
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noSpeechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAudioStatusChange = useCallback((status: PlayerStatus) => {
     setAudioStatus(status);
@@ -378,13 +388,129 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
+  // Sends one finished voice command to the agents and wires up the result callbacks
+  const submitCommand = (text: string) => {
+    if (completedClearRef.current) clearTimeout(completedClearRef.current);
+    setActiveAgents(agentSubIdsRef.current);
+    setCompletedAgents([]);
+    setProcessing(true);
+
+    const newExchange: ConversationExchange = {
+      id: crypto.randomUUID(),
+      transcript: text,
+      agentMessage: "",
+      executionTime: null,
+      timestamp: new Date(),
+    };
+    currentExchangeRef.current = newExchange;
+    setCurrentExchange(newExchange);
+
+    const callbacks: VoiceCallbacks = {
+      onAgentResult: (agent, message) => {
+        setActiveAgents(prev => prev.filter(a => a !== agent));
+        setCompletedAgents(prev => prev.includes(agent) ? prev : [...prev, agent]);
+        const label = agent
+          .replace("_agent", "")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, c => c.toUpperCase());
+        if (currentExchangeRef.current) {
+          const updated: ConversationExchange = {
+            ...currentExchangeRef.current,
+            agentMessage: currentExchangeRef.current.agentMessage
+              ? `${currentExchangeRef.current.agentMessage}\n[${label}] ${message}`
+              : `[${label}] ${message}`,
+          };
+          currentExchangeRef.current = updated;
+          setCurrentExchange(updated);
+        }
+      },
+      onFinal: (finalResponse) => {
+        const res = finalResponse as Record<string, unknown>;
+        let finalMessage = currentExchangeRef.current?.agentMessage ?? "";
+        if (res.intent === "direct_answer" && typeof res.message === "string" && res.message) {
+          finalMessage = res.message;
+        }
+        const execTime = typeof res.execution_time_seconds === "number" ? res.execution_time_seconds : null;
+        if (res.final_state) {
+          setVehicleState(res.final_state as VehicleState);
+        }
+        if (currentExchangeRef.current) {
+          const finalized: ConversationExchange = {
+            ...currentExchangeRef.current,
+            agentMessage: finalMessage,
+            executionTime: execTime,
+          };
+          setConversations(prev => [finalized, ...prev].slice(0, 5));
+        }
+        currentExchangeRef.current = null;
+        setCurrentExchange(null);
+        setActiveAgents([]);
+        setProcessing(false);
+        completedClearRef.current = setTimeout(() => setCompletedAgents([]), 3000);
+        const messageToSpeak = typeof res.message === "string" ? res.message : "";
+        if (messageToSpeak) speakResponse(messageToSpeak);
+      },
+      onError: (error) => {
+        if (currentExchangeRef.current) {
+          const errMsg = currentExchangeRef.current.agentMessage
+            ? `${currentExchangeRef.current.agentMessage}\nError: ${error}`
+            : `Error: ${error}`;
+          const finalized: ConversationExchange = {
+            ...currentExchangeRef.current,
+            agentMessage: errMsg,
+            executionTime: null,
+          };
+          setConversations(prev => [finalized, ...prev].slice(0, 5));
+          currentExchangeRef.current = null;
+          setCurrentExchange(null);
+        }
+        setActiveAgents([]);
+        setCompletedAgents([]);
+        setProcessing(false);
+      },
+    };
+
+    const history = conversations.map(c => ({
+      transcript: c.transcript,
+      agentMessage: c.agentMessage,
+    }));
+    const cancel = sendVoiceCommand(text, history, callbacks);
+    cancelJobRef.current = cancel;
+  };
+
+  const clearVoiceTimers = () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
+    silenceTimerRef.current = null;
+    noSpeechTimerRef.current = null;
+  };
+
+  // Ends the listening session; when send is true, everything heard is submitted as one command
+  const stopListening = (send: boolean) => {
+    clearVoiceTimers();
+    const text = `${committedTextRef.current} ${sessionTextRef.current}`.replace(/\s+/g, " ").trim();
+    committedTextRef.current = "";
+    sessionTextRef.current = "";
+    listeningRef.current = false;
+    setListening(false);
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    recognition?.stop();
+    if (send && text) submitCommand(text);
+  };
+
+  useEffect(() => () => {
+    clearVoiceTimers();
+    recognitionRef.current?.stop();
+  }, []);
+
   const toggleListening = () => {
     if (typeof window === "undefined") return;
     const w = window as WindowWithSpeech;
     const SpeechRecognitionImpl = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRecognitionImpl) return;
 
-    // Cancel in-flight job if processing — keep listening so user can speak again
+    // Cancel in-flight job if processing
     if (processing && cancelJobRef.current) {
       cancelJobRef.current();
       cancelJobRef.current = null;
@@ -394,140 +520,56 @@ export default function Dashboard() {
       return;
     }
 
-    // Stop if already listening
-    if (listeningRef.current && recognitionRef.current) {
-      listeningRef.current = false;
-      setListening(false);
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
+    // Second click while listening sends what was heard straight away
+    if (listeningRef.current) {
+      stopListening(true);
       return;
     }
 
-    // Start listening
+    // Start listening — one command per click, sent after SILENCE_MS of quiet
     const recognition = new SpeechRecognitionImpl();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
     recognition.onresult = (event: SpeechRecognitionEventAPI) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          const text = event.results[i][0].transcript;
-          if (completedClearRef.current) clearTimeout(completedClearRef.current);
-          setActiveAgents(agentSubIdsRef.current);
-          setCompletedAgents([]);
-          setProcessing(true);
-
-          const newExchange: ConversationExchange = {
-            id: crypto.randomUUID(),
-            transcript: text,
-            agentMessage: "",
-            executionTime: null,
-            timestamp: new Date(),
-          };
-          currentExchangeRef.current = newExchange;
-          setCurrentExchange(newExchange);
-
-          const callbacks: VoiceCallbacks = {
-            onAgentResult: (agent, message) => {
-              setActiveAgents(prev => prev.filter(a => a !== agent));
-              setCompletedAgents(prev => prev.includes(agent) ? prev : [...prev, agent]);
-              const label = agent
-                .replace("_agent", "")
-                .replace(/_/g, " ")
-                .replace(/\b\w/g, c => c.toUpperCase());
-              if (currentExchangeRef.current) {
-                const updated: ConversationExchange = {
-                  ...currentExchangeRef.current,
-                  agentMessage: currentExchangeRef.current.agentMessage
-                    ? `${currentExchangeRef.current.agentMessage}\n[${label}] ${message}`
-                    : `[${label}] ${message}`,
-                };
-                currentExchangeRef.current = updated;
-                setCurrentExchange(updated);
-              }
-            },
-            onFinal: (finalResponse) => {
-              const res = finalResponse as Record<string, unknown>;
-              let finalMessage = currentExchangeRef.current?.agentMessage ?? "";
-              if (res.intent === "direct_answer" && typeof res.message === "string" && res.message) {
-                finalMessage = res.message;
-              }
-              const execTime = typeof res.execution_time_seconds === "number" ? res.execution_time_seconds : null;
-              if (res.final_state) {
-                setVehicleState(res.final_state as VehicleState);
-              }
-              if (currentExchangeRef.current) {
-                const finalized: ConversationExchange = {
-                  ...currentExchangeRef.current,
-                  agentMessage: finalMessage,
-                  executionTime: execTime,
-                };
-                setConversations(prev => [finalized, ...prev].slice(0, 5));
-              }
-              currentExchangeRef.current = null;
-              setCurrentExchange(null);
-              setActiveAgents([]);
-              setProcessing(false);
-              completedClearRef.current = setTimeout(() => setCompletedAgents([]), 3000);
-              const messageToSpeak = typeof res.message === "string" ? res.message : "";
-              if (messageToSpeak) speakResponse(messageToSpeak);
-            },
-            onError: (error) => {
-              if (currentExchangeRef.current) {
-                const errMsg = currentExchangeRef.current.agentMessage
-                  ? `${currentExchangeRef.current.agentMessage}\nError: ${error}`
-                  : `Error: ${error}`;
-                const finalized: ConversationExchange = {
-                  ...currentExchangeRef.current,
-                  agentMessage: errMsg,
-                  executionTime: null,
-                };
-                setConversations(prev => [finalized, ...prev].slice(0, 5));
-                currentExchangeRef.current = null;
-                setCurrentExchange(null);
-              }
-              setActiveAgents([]);
-              setCompletedAgents([]);
-              setProcessing(false);
-            },
-          };
-
-          const history = conversations.map(c => ({
-                            transcript: c.transcript,
-                            agentMessage: c.agentMessage,
-                          }));
-          const cancel = sendVoiceCommand(text, history, callbacks);
-          cancelJobRef.current = cancel;
-        }
+      // results holds every phrase of this session (final and interim), so rebuild the whole transcript
+      const parts: string[] = [];
+      for (let i = 0; i < event.results.length; i++) {
+        parts.push(event.results[i][0].transcript);
       }
+      sessionTextRef.current = parts.join(" ");
+
+      if (noSpeechTimerRef.current) {
+        clearTimeout(noSpeechTimerRef.current);
+        noSpeechTimerRef.current = null;
+      }
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => stopListening(true), SILENCE_MS);
     };
 
     recognition.onend = () => {
-      // Restart automatically if still in listening mode
-      if (listeningRef.current && recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch { }
+      if (!listeningRef.current || recognitionRef.current !== recognition) return;
+      // The browser ended the session on its own (e.g. a long pause) — keep what was heard and resume
+      committedTextRef.current = `${committedTextRef.current} ${sessionTextRef.current}`;
+      sessionTextRef.current = "";
+      try {
+        recognition.start();
+      } catch {
+        stopListening(true);
       }
     };
 
     recognition.onerror = (event: { error: string }) => {
-      if (event.error === "no-speech") {
-        // Restart on silence — don't stop
-        if (listeningRef.current && recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch { }
-        }
-      } else {
-        // Fatal error — stop
-        listeningRef.current = false;
-        setListening(false);
-        recognitionRef.current = null;
-      }
+      // no-speech / aborted end the session normally — onend resumes it
+      if (event.error === "no-speech" || event.error === "aborted") return;
+      // Fatal error (e.g. mic permission denied) — stop without sending a partial command
+      stopListening(false);
     };
 
+    committedTextRef.current = "";
+    sessionTextRef.current = "";
+    noSpeechTimerRef.current = setTimeout(() => stopListening(false), NO_SPEECH_MS);
     recognitionRef.current = recognition;
     listeningRef.current = true;
     setListening(true);
