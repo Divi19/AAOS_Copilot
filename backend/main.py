@@ -30,6 +30,7 @@ from agents.car_agent.agent import car_agent
 from agents.office_agent.agent import office_agent
 from agents.music_agent.agent import music_agent
 from agents.weather_agent.agent import weather_agent
+from agents.model_config import MODEL
 
 app = FastAPI(title="AAOS AI Copilot Backend")
 
@@ -207,7 +208,7 @@ AGENT_REGISTRY = {
         "icon": "hub",
         "description": "Routes intents to specialized sub-agents",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "router"
     },
     "car_agent": {
@@ -215,7 +216,7 @@ AGENT_REGISTRY = {
         "icon": "directions_car",
         "description": "Controls vehicle hardware: climate, locks, suspension, modes",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["set_climate", "lock_vehicle", "set_vehicle_mode", "control_frunk", "set_suspension"]
     },
@@ -224,7 +225,7 @@ AGENT_REGISTRY = {
         "icon": "business_center",
         "description": "Manages workspace: Slack messages, calendar blocks",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["send_slack_message", "create_calendar_block"]
     },
@@ -233,7 +234,7 @@ AGENT_REGISTRY = {
         "icon": "music_note",
         "description": "Controls mood-based and specific music playback via Spotify",
         "status": "active",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["play_music_for_mood", "play_specific_track"]
     },
@@ -242,7 +243,7 @@ AGENT_REGISTRY = {
         "icon": "partly_cloudy_day",
         "description": "Fetches live weather and proactively adjusts vehicle settings for comfort and safety",
         "status": "active",
-        "model": "gemini-2.0-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["get_weather_and_adjust", "get_weather_info"]
     },
@@ -251,7 +252,7 @@ AGENT_REGISTRY = {
         "icon": "car_rental",
         "description": "Manages fleet check-in/out, damage reports, customer handoff",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["check_in_vehicle", "generate_damage_report", "handoff_to_customer"]
     },
@@ -260,7 +261,7 @@ AGENT_REGISTRY = {
         "icon": "local_shipping",
         "description": "Assists drivers with HOS compliance, route optimization, load management",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["check_hos_status", "optimize_route", "log_cargo_weight"]
     },
@@ -269,7 +270,7 @@ AGENT_REGISTRY = {
         "icon": "fleet_management",
         "description": "OEM-level fleet telemetry, predictive maintenance, recall management",
         "status": "coming_soon",
-        "model": "gemini-2.5-flash",
+        "model": MODEL,
         "type": "specialist",
         "tools": ["get_fleet_health", "schedule_maintenance", "issue_recall"]
     }

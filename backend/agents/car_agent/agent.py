@@ -1,9 +1,10 @@
 from google.adk.agents import Agent
+from agents.model_config import MODEL
 from agents.shared_tools import set_vehicle_mode, lock_vehicle, set_climate, control_frunk, set_suspension, precondition_battery, schedule_departure, prepare_for_trip, set_seat_heating, set_seat_ventilation, set_air_purification, set_recirculation
 
 car_agent = Agent(
     name="car_agent",
-    model="gemini-2.5-flash",
+    model=MODEL,
     instruction="""You are a dedicated car hardware agent. You control the vehicle safely and responsibly.
 You can control: climate (temperature on/off), locks, vehicle mode (camp, dog, normal, sentry, valet), frunk (open/close), suspension level (entry, low, standard, high), battery preconditioning, departure scheduling, seat heating and ventilation (levels 0-3), air purification, and air recirculation.
 
