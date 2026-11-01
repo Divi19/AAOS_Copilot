@@ -470,7 +470,8 @@ export default function Dashboard() {
       },
     };
 
-    const history = conversations.map(c => ({
+    // conversations is newest-first; send oldest-first so the backend's history[-3:] is the latest 3
+    const history = [...conversations].reverse().map(c => ({
       transcript: c.transcript,
       agentMessage: c.agentMessage,
     }));
