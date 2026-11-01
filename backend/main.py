@@ -98,6 +98,9 @@ DRIVER_MEMORY = {
 # Job store for polling-based agent execution
 jobs: Dict[str, Any] = {}
 
+# Per-agent time limit — keep it under the frontend's 60s polling timeout
+AGENT_TIMEOUT_S = 30
+
 # Accept BOTH formats: frontend sends {transcript}, old UI sends {prompt}
 class VoicePayload(BaseModel):
     prompt: Optional[str] = None
@@ -367,7 +370,17 @@ async def execute_agents_background(job_id: str, user_text: str, driver_memory: 
 
         # ── Step 4: as_completed — append each result the moment it finishes ──
         async def run_with_name(name: str, sub_prompt: str):
-            result = await asyncio.wait_for(run_agent(name, sub_prompt, start_time), timeout=30)
+            try:
+                result = await asyncio.wait_for(run_agent(name, sub_prompt, start_time), timeout=AGENT_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                # Report the timeout so the user sees a reply instead of nothing
+                print(f"⏱️ [BG:{job_id[:8]}] {name} timed out after {AGENT_TIMEOUT_S}s")
+                result = {
+                    "agent": name,
+                    "message": "Sorry, that took too long. Please try again.",
+                    "tools_called": [],
+                    "agent_trace": [],
+                }
             return name, result
 
         coros = [run_with_name(name, sub_prompt) for name, sub_prompt in agent_tasks.items()]
