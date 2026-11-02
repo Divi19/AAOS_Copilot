@@ -27,6 +27,7 @@ interface WindowWithSpeech extends Window {
 
 interface VehicleState {
   is_locked: boolean;
+  child_lock_on?: boolean;
   climate_on: boolean;
   climate_temp: number;
   battery_level: number;
@@ -665,6 +666,7 @@ export default function Dashboard() {
               <div style={{ fontSize: "9px", letterSpacing: "0.1em", color: "#a0a8bc", textTransform: "uppercase", marginTop: "2px", fontFamily: "Space Grotesk, system-ui" }}>SYSTEMS NOMINAL</div>
             </div>
             {sideCard("lock", "Lock", vehicleState?.is_locked ? "SECURED" : "UNLOCKED", vehicleState?.is_locked ? "SECURE" : "OPEN", lockColor, vehicleState?.is_locked ?? false)}
+            {sideCard("child_care", "Child Lock", vehicleState?.child_lock_on ? "ENGAGED" : "OFF", "REAR DOORS", "#fbbf24", vehicleState?.child_lock_on ?? false)}
             {sideCard("thermostat", "Climate", vehicleState?.climate_temp ? `${vehicleState.climate_temp}°C` : "—", vehicleState?.climate_on ? "ACTIVE" : "OFF", tempColor, vehicleState?.climate_on ?? false)}
             {sideCard("battery_charging_full", "Battery", vehicleState?.battery_level ? `${vehicleState.battery_level}%` : "—", vehicleState?.battery_level ? `${Math.round(vehicleState.battery_level * 3.5)} MI RANGE` : "—", battColor, (vehicleState?.battery_level ?? 0) > 20)}
             {sideCard("directions_car", "Frunk", vehicleState?.frunk_open ? "OPEN" : "CLOSED", "CARGO AREA", frunkColor, vehicleState?.frunk_open ?? false)}
