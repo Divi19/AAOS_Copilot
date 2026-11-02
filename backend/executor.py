@@ -59,6 +59,12 @@ def execute_action(action: Action, state: VehicleState) -> ActionResult:
             state.is_locked = locked
             status_str = "locked" if locked else "unlocked"
             return ActionResult(success=True, message=f"Vehicle is now {status_str}")
+
+        elif tool == "setChildLock":
+            enabled = params.get("enabled", True)
+            state.child_lock_on = enabled
+            status_str = "engaged — rear doors can't be opened from inside" if enabled else "disengaged"
+            return ActionResult(success=True, message=f"Child lock {status_str}")
             
         elif tool == "setVehicleMode":
             mode = params.get("mode", "normal")

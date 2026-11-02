@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 
 class VehicleState(BaseModel):
     is_locked: bool = True
+    child_lock_on: bool = False  # rear-door child safety locks, separate from is_locked
     climate_on: bool = False
     climate_temp: float = 20.0
     battery_level: float = 80.0

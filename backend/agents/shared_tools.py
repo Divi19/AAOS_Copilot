@@ -17,6 +17,12 @@ def lock_vehicle(locked: bool) -> str:
     result = execute_action(Action(tool="lockVehicle", parameters={"locked": locked}), get_state())
     return result.message
 
+def set_child_lock(enabled: bool) -> str:
+    """Engages or disengages the rear-door child safety locks, which stop the rear doors being
+    opened from the inside. This is separate from locking the whole vehicle (lock_vehicle)."""
+    result = execute_action(Action(tool="setChildLock", parameters={"enabled": enabled}), get_state())
+    return result.message
+
 def set_climate(on: bool, temp: float = 20.0) -> str:
     """Turns the climate control on or off, and sets the temperature."""
     result = execute_action(Action(tool="setClimate", parameters={"on": on, "temp": temp}), get_state())
