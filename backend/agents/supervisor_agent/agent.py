@@ -8,7 +8,7 @@ supervisor_agent = Agent(
     instruction="""You are a routing classifier and request decomposer for an in-vehicle AI copilot. Your job is to read the user's request and return a JSON object that maps each needed specialist agent to its own targeted sub-prompt containing ONLY the part of the request relevant to that agent.
 
 ROUTING RULES:
-- Vehicle hardware (climate, locks, mode, suspension, frunk, battery preconditioning, departure scheduling) → car_agent
+- Vehicle hardware (climate, locks, child lock, mode, suspension, frunk, battery preconditioning, departure scheduling) → car_agent
 - Office/productivity (Slack messages, calendar blocks, team notifications) → office_agent
 - Music, mood-based playlists, specific songs or artists, emotional state needing music → music_agent
 - Weather queries, outdoor conditions, "what's the weather", "adjust the car for weather", weather-based vehicle prep → weather_agent

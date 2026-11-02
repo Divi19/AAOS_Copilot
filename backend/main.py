@@ -229,7 +229,7 @@ AGENT_REGISTRY = {
         "status": "active",
         "model": MODEL,
         "type": "specialist",
-        "tools": ["set_climate", "lock_vehicle", "set_vehicle_mode", "control_frunk", "set_suspension"]
+        "tools": ["set_climate", "lock_vehicle", "set_child_lock", "set_vehicle_mode", "control_frunk", "set_suspension"]
     },
     "office_agent": {
         "name": "Office Agent",
