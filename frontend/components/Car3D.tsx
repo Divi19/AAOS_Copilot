@@ -46,6 +46,10 @@ const PARTS = {
 } as const;
 type PartName = keyof typeof PARTS;
 
+// Vehicle mode colours, the same as the dashboard's Mode card (app/page.tsx getModeColor)
+const MODE_COLORS: Record<string, string> = { camp: GREEN, dog: AMBER, sport: "#f87171", eco: "#86efac", normal: BLUE };
+const OFFLINE = "#f59e0b";
+
 // Body ride height per suspension level, as a fraction of the car's height
 const RIDE_HEIGHT: Record<string, number> = { entry: -0.05, low: -0.035, standard: 0, high: 0.05 };
 const HOOD_OPEN_ANGLE = 0.9; // radians
@@ -308,6 +312,32 @@ function CarAnimator({ rig, state }: { rig: CarRig; state: VehicleState | null }
   return null;
 }
 
+/** Pulses the floor ring in the vehicle mode's colour; hidden in normal mode, like the 2D car. */
+function stepModeRing(ring: THREE.Mesh, mode: string, time: number, dt: number) {
+  const mat = ring.material as THREE.MeshBasicMaterial;
+  const k = 1 - Math.exp(-Math.min(dt, 0.1) * 6);
+  const active = mode !== "normal" && mode in MODE_COLORS;
+  mat.color.lerp(new THREE.Color(MODE_COLORS[mode] ?? BLUE), k);
+  const target = active ? 0.25 + 0.2 * Math.sin(time * 2.5) : 0; // 2D campPulse/modePulse rhythm
+  mat.opacity += (target - mat.opacity) * k;
+  ring.visible = mat.opacity > 0.005;
+}
+
+function ModeRing({ radius, mode }: { radius: number; mode: string }) {
+  const ring = useMemo(() => {
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(radius * 1.0, radius * 1.035, 128),
+      new THREE.MeshBasicMaterial({ color: BLUE, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = 0.004;
+    return mesh;
+  }, [radius]);
+  useEffect(() => () => { ring.geometry.dispose(); (ring.material as THREE.Material).dispose(); }, [ring]);
+  useFrame(({ clock }, dt) => stepModeRing(ring, mode, clock.elapsedTime, dt));
+  return <primitive object={ring} />;
+}
+
 function CarScene({ state }: { state: VehicleState | null }) {
   const { scene } = useGLTF(MODEL_URL);
   const rig = useMemo(() => buildRig(scene), [scene]);
@@ -324,9 +354,31 @@ function CarScene({ state }: { state: VehicleState | null }) {
     <>
       <primitive object={rig.root} />
       <primitive object={floor} />
+      <ModeRing radius={rig.radius} mode={(state?.camp_mode ? "camp" : state?.vehicle_mode ?? "normal").toLowerCase()} />
       <CarAnimator rig={rig} state={state} />
       <CameraRig rig={rig} />
     </>
+  );
+}
+
+function Badge({ label, color, background }: { label: string; color: string; background: string }) {
+  return (
+    <span style={{ padding: "3px 10px", borderRadius: "4px", background, border: `1px solid ${color}55`, color, fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", fontFamily: "Space Grotesk, system-ui" }}>
+      {label}
+    </span>
+  );
+}
+
+/** Mode and connectivity labels under the car, matching the 2D car's badges. */
+function StatusBadges({ state }: { state: VehicleState | null }) {
+  const mode = (state?.camp_mode ? "camp" : state?.vehicle_mode ?? "normal").toLowerCase();
+  const offline = (state?.connectivity_mode ?? "cloud") !== "cloud";
+  if (!state) return null;
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: "16%", display: "flex", justifyContent: "center", gap: "8px", pointerEvents: "none" }}>
+      <Badge label={mode === "normal" ? "NORMAL" : `${mode.toUpperCase()} MODE`} color={MODE_COLORS[mode] ?? BLUE} background="rgba(10,16,32,0.85)" />
+      {offline && <Badge label="OFFLINE" color={OFFLINE} background="rgba(26,10,0,0.95)" />}
+    </div>
   );
 }
 
@@ -336,6 +388,7 @@ export default function Car3D({ state }: { state: VehicleState | null }) {
       <Canvas camera={{ fov: 35, near: 0.1, far: 200 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }} style={{ background: "transparent" }}>
         <CarScene state={state} />
       </Canvas>
+      <StatusBadges state={state} />
       {/* CC BY 4.0 attribution for the model (see public/models/CREDITS.md) */}
       <div style={{ position: "absolute", bottom: "12px", left: 0, right: 0, textAlign: "center", fontSize: "8px", letterSpacing: "0.08em", color: "rgba(139,144,160,0.55)", fontFamily: "Space Grotesk, system-ui", pointerEvents: "none" }}>
         3D model: CarConcept © Darmstadt Graphics Group, CC BY 4.0
