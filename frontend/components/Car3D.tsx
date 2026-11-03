@@ -2,9 +2,10 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { TrackballControls, useGLTF } from "@react-three/drei";
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { TrackballControls as TrackballControlsImpl } from "three-stdlib";
+import CarLoading from "./CarLoading";
 import type { VehicleState } from "../lib/vehicleState";
 
 const MODEL_URL = "/models/car-concept.glb";
@@ -338,10 +339,11 @@ function ModeRing({ radius, mode }: { radius: number; mode: string }) {
   return <primitive object={ring} />;
 }
 
-function CarScene({ state }: { state: VehicleState | null }) {
+function CarScene({ state, onReady }: { state: VehicleState | null; onReady: () => void }) {
   const { scene } = useGLTF(MODEL_URL);
   const rig = useMemo(() => buildRig(scene), [scene]);
   useEffect(() => () => disposeRig(rig), [rig]);
+  useEffect(onReady, [rig, onReady]);
 
   const floor = useMemo(() => {
     const grid = new THREE.PolarGridHelper(rig.radius * 1.05, 16, 5, 96, BLUE, BLUE);
@@ -383,12 +385,17 @@ function StatusBadges({ state }: { state: VehicleState | null }) {
 }
 
 export default function Car3D({ state }: { state: VehicleState | null }) {
+  const [ready, setReady] = useState(false);
+  const onReady = useMemo(() => () => setReady(true), []);
   return (
     <>
       <Canvas camera={{ fov: 35, near: 0.1, far: 200 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }} style={{ background: "transparent" }}>
-        <CarScene state={state} />
+        <Suspense fallback={null}>
+          <CarScene state={state} onReady={onReady} />
+        </Suspense>
       </Canvas>
-      <StatusBadges state={state} />
+      {!ready && <CarLoading />}
+      {ready && <StatusBadges state={state} />}
       {/* CC BY 4.0 attribution for the model (see public/models/CREDITS.md) */}
       <div style={{ position: "absolute", bottom: "12px", left: 0, right: 0, textAlign: "center", fontSize: "8px", letterSpacing: "0.08em", color: "rgba(139,144,160,0.55)", fontFamily: "Space Grotesk, system-ui", pointerEvents: "none" }}>
         3D model: CarConcept © Darmstadt Graphics Group, CC BY 4.0

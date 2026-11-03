@@ -5,7 +5,7 @@ import { getVehicleState, sendVoiceCommand, toggleConnectivity, VoiceCallbacks, 
 import SpotifyPlayer, { PlayerStatus } from "../components/SpotifyPlayer";
 import NowPlaying from "../components/NowPlaying";
 import AgentTree from "../components/AgentTree";
-import CarVisualization2D from "../components/CarVisualization2D";
+import CarView from "../components/CarView";
 import type { VehicleState } from "../lib/vehicleState";
 
 interface SpeechRecognitionAPI extends EventTarget {
@@ -450,7 +450,7 @@ export default function Dashboard() {
             <div style={{ position: "absolute", bottom: "40px", left: "40px", width: "40px", height: "40px", borderLeft: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 0 4px" }} />
             <div style={{ position: "absolute", bottom: "40px", right: "40px", width: "40px", height: "40px", borderRight: "2px solid rgba(152,203,255,0.3)", borderBottom: "2px solid rgba(152,203,255,0.3)", borderRadius: "0 0 4px 0" }} />
 
-            <CarVisualization2D state={vehicleState} />
+            <CarView state={vehicleState} />
 
             {/* Now Playing — bottom left of canvas */}
             <div style={{ position: "absolute", bottom: "40px", left: "40px", zIndex: 20 }}>
